@@ -5,39 +5,56 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NEON-SHIELD V1.5 | Militärischer Datentresor</title>
     <style>
-        :root { --neon: #00f2ff; --bg: #05080a; --panel: #0f172a; --border: #1e2937; --text: #f1f5f9; --warning: #ff4757; }
+        :root { --neon: #00f2ff; --bg: #05080a; --panel: #0f172a; --border: #1e2937; --text: #f1f5f9; --warning: #ff4757; --success: #2ecc71; --caution: #f1c40f; }
         body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; line-height: 1.6; }
         .container { max-width: 900px; margin: auto; }
         
-        .card { background: var(--panel); border: 1px solid var(--border); padding: 25px; border-radius: 12px; margin-bottom: 25px; }
-        h1 { color: var(--neon); text-align: center; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px; }
+        .card { background: var(--panel); border: 1px solid var(--border); padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); position: relative; }
+        h1 { color: var(--neon); text-align: center; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; text-shadow: 0 0 10px rgba(0, 242, 255, 0.3); }
         h2 { color: var(--neon); font-size: 1.1rem; text-transform: uppercase; margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
         
         .alert { border: 1px solid var(--warning); background: rgba(255, 71, 87, 0.1); color: var(--warning); padding: 15px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; }
-        .info-text { font-size: 0.9rem; color: #94a3b8; margin-bottom: 20px; }
+        .info-text { font-size: 0.9rem; color: #94a3b8; margin-bottom: 20px; text-align: center; }
         
+        /* Inputs & Buttons */
+        .input-wrapper { position: relative; width: 100%; }
         input, button { width: 100%; padding: 14px; margin: 10px 0; border-radius: 8px; border: 1px solid var(--border); background: #000; color: #fff; box-sizing: border-box; font-size: 1rem; }
+        input:focus { border-color: var(--neon); outline: none; }
         button { background: var(--neon); color: #000; font-weight: bold; cursor: pointer; border: none; transition: 0.3s; }
         button:hover { filter: brightness(1.2); box-shadow: 0 0 15px var(--neon); }
         
+        /* Drop Zone */
         .drop-zone { border: 2px dashed var(--border); padding: 40px; text-align: center; border-radius: 12px; cursor: pointer; background: rgba(0,0,0,0.3); transition: 0.3s; }
-        .drop-zone.dragover { border-color: var(--neon); background: rgba(0, 242, 255, 0.1); }
+        .drop-zone:hover, .drop-zone.dragover { border-color: var(--neon); background: rgba(0, 242, 255, 0.1); }
         
+        /* Passwort Features */
+        .eye-icon { position: absolute; right: 15px; top: 24px; cursor: pointer; color: var(--neon); font-size: 1.2rem; user-select: none; z-index: 10; }
+        .strength-meter { height: 4px; background: #222; margin-top: -8px; margin-bottom: 15px; border-radius: 2px; overflow: hidden; }
+        .strength-fill { height: 100%; width: 0%; transition: width 0.3s ease, background 0.3s ease; }
+
+        /* Previews */
         .preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; margin-top: 25px; }
-        .preview-item { background: #000; border: 1px solid var(--neon); padding: 10px; border-radius: 10px; text-align: center; }
-        .preview-item img { max-width: 100%; border-radius: 5px; }
+        .preview-item { background: #000; border: 1px solid var(--neon); padding: 10px; border-radius: 10px; text-align: center; overflow: hidden; }
+        .preview-item img { max-width: 100%; border-radius: 5px; height: 100px; object-fit: cover; }
         
-        #log { color: var(--neon); font-size: 0.9rem; text-align: center; margin-top: 15px; font-weight: 600; }
+        #log { color: var(--neon); font-size: 0.9rem; text-align: center; margin-top: 15px; font-weight: 600; min-height: 20px; }
         ul { padding-left: 20px; }
         li { margin-bottom: 8px; }
+
+        /* Loader */
+        #loading-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 999; justify-content: center; align-items: center; }
+        .spinner { width: 40px; height: 40px; border: 4px solid #333; border-top: 4px solid var(--neon); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
+<div id="loading-overlay"><div class="spinner"></div></div>
+
 <div class="container">
     <header>
         <h1>NEON-SHIELD V1.5</h1>
-        <div class="info-text" style="text-align: center;">
+        <div class="info-text">
             Open Source auf GitHub | Entwickelt von einem Einzelentwickler
         </div>
     </header>
@@ -53,7 +70,7 @@
         <div class="alert">
             ⚠️ WICHTIG: Merke dir dein Passwort gut! Wenn du es verlierst, gibt es KEINE Möglichkeit, deine Daten wiederherzustellen. Es gibt keinen "Passwort vergessen" Button.
         </div>
-        <p class="info-text">
+        <p class="info-text" style="text-align: left; margin-bottom: 0;">
             <strong>Wichtige Info:</strong> Wir haben keinerlei Zugang zu deinen Daten oder Passwörtern. Alles läuft 100% lokal in deinem Browser ab. Nichts wird in eine Cloud hochgeladen oder an Server gesendet.
         </p>
     </div>
@@ -64,15 +81,25 @@
             Dateien hierher ziehen oder klicken
             <input type="file" id="file-input" multiple style="display:none">
         </div>
-        <div id="file-info" style="font-size:0.8rem; margin-top:10px; text-align: center; color: var(--neon);">Keine Dateien geladen.</div>
+        <div id="file-info" style="font-size:0.9rem; margin-top:10px; text-align: center; color: var(--neon);">Keine Dateien geladen.</div>
     </div>
 
     <div class="card">
         <h2>02_SICHERHEITS-SCHLÜSSEL</h2>
-        <input type="password" id="pass" placeholder="Dein Master-Passwort...">
+        
+        <div class="input-wrapper">
+            <input type="password" id="pass" placeholder="Dein Master-Passwort...">
+            <span class="eye-icon" onclick="togglePass()">👁️</span>
+        </div>
+        
+        <!-- Passwort Stärke Balken -->
+        <div class="strength-meter">
+            <div id="strength-fill" class="strength-fill"></div>
+        </div>
+
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-            <button onclick="lock()">🔒 LOCK (.neon)</button>
-            <button onclick="unlock()" style="background:#334155; color:#fff;">🔓 UNLOCK</button>
+            <button onclick="process('lock')">🔒 LOCK (.neon)</button>
+            <button onclick="process('unlock')" style="background:#334155; color:#fff;">🔓 UNLOCK</button>
         </div>
         <div id="log"></div>
     </div>
@@ -91,8 +118,38 @@
     let currentFiles = [];
     const dropArea = document.getElementById('drop-area');
     const fileInput = document.getElementById('file-input');
+    const fileInfo = document.getElementById('file-info');
+    const overlay = document.getElementById('loading-overlay');
+    const passInput = document.getElementById('pass');
+    const strengthFill = document.getElementById('strength-fill');
 
-    // Drag & Drop Handling
+    // --- NEUE FEATURES OHNE TEXTÄNDERUNG ---
+
+    // 1. Passwort Auge
+    function togglePass() {
+        passInput.type = passInput.type === 'password' ? 'text' : 'password';
+    }
+
+    // 2. Passwort Stärke (Rot / Gelb / Grün)
+    passInput.addEventListener('input', () => {
+        const val = passInput.value;
+        let score = 0;
+        
+        if (val.length > 0) score += 10;
+        if (val.length >= 8) score += 30;
+        if (/[A-Z]/.test(val)) score += 20;
+        if (/[0-9]/.test(val)) score += 20;
+        if (/[^A-Za-z0-9]/.test(val)) score += 20;
+
+        strengthFill.style.width = score + "%";
+        
+        if (score < 40) strengthFill.style.background = "var(--warning)"; // Rot
+        else if (score < 80) strengthFill.style.background = "var(--caution)"; // Gelb
+        else strengthFill.style.background = "var(--success)"; // Grün
+    });
+
+    // --- BESTEHENDE LOGIK ---
+
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => {
         dropArea.addEventListener(e, (evt) => { evt.preventDefault(); evt.stopPropagation(); }, false);
     });
@@ -101,58 +158,80 @@
     dropArea.addEventListener('dragleave', () => dropArea.classList.remove('dragover'));
     dropArea.addEventListener('drop', (e) => {
         dropArea.classList.remove('dragover');
-        updateFiles(e.dataTransfer.files);
+        handleFiles(e.dataTransfer.files);
     });
 
     dropArea.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', (e) => updateFiles(e.target.files));
+    fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
 
-    function updateFiles(files) {
+    function handleFiles(files) {
         currentFiles = Array.from(files);
-        document.getElementById('file-info').innerText = currentFiles.length + " Datei(en) bereit: " + currentFiles.map(f => f.name).join(", ");
+        if(currentFiles.length > 0) {
+            fileInfo.innerText = currentFiles.length + " Datei(en) bereit: " + currentFiles.map(f => f.name).join(", ");
+            fileInfo.style.color = "var(--neon)";
+        } else {
+            fileInfo.innerText = "Keine Dateien geladen.";
+            fileInfo.style.color = "inherit";
+        }
     }
 
-    // --- LOCK (Sperren) ---
-    async function lock() {
-        const pw = document.getElementById('pass').value;
-        if(!pw || currentFiles.length === 0) return alert("Passwort oder Dateien fehlen!");
+    async function process(action) {
+        const pw = passInput.value;
         const log = document.getElementById('log');
-        log.innerText = "Sperre läuft...";
+        
+        if(!pw) return log.innerText = "Passwort fehlt!";
+        if(currentFiles.length === 0) return log.innerText = "Keine Dateien!";
 
-        try {
-            const encoder = new TextEncoder();
-            const dataParts = [];
-            for (let f of currentFiles) {
-                const content = new Uint8Array(await f.arrayBuffer());
-                const header = encoder.encode(JSON.stringify({ n: f.name, t: f.type, s: content.length }));
-                const headerLen = new Uint32Array([header.length]);
-                dataParts.push(new Uint8Array(headerLen.buffer), header, content);
+        overlay.style.display = 'flex'; // Ladescreen an
+
+        setTimeout(async () => {
+            try {
+                if(action === 'lock') await lock(pw);
+                else await unlock(pw);
+            } catch(e) {
+                console.error(e);
+                log.innerText = "FEHLER: Vorgang gescheitert.";
             }
-
-            const combinedData = new Uint8Array(await new Blob(dataParts).arrayBuffer());
-            const salt = crypto.getRandomValues(new Uint8Array(16));
-            const iv = crypto.getRandomValues(new Uint8Array(12));
-            const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(pw), "PBKDF2", false, ["deriveKey"]);
-            const key = await crypto.subtle.deriveKey(
-                { name: "PBKDF2", salt: salt, iterations: 100000, hash: "SHA-256" },
-                keyMaterial, { name: "AES-GCM", length: 256 }, false, ["encrypt"]
-            );
-            const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, combinedData);
-            
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(new Blob([salt, iv, encrypted]));
-            a.download = "tresor.neon";
-            a.click();
-            log.innerText = "FERTIG: tresor.neon gespeichert.";
-        } catch(e) { log.innerText = "FEHLER BEIM SPERREN!"; }
+            overlay.style.display = 'none'; // Ladescreen aus
+        }, 50);
     }
 
-    // --- UNLOCK (Entsperren) ---
-    async function unlock() {
-        const pw = document.getElementById('pass').value;
+    // High-Security Crypto (600k Iterationen)
+    async function lock(pw) {
+        const log = document.getElementById('log');
+        const encoder = new TextEncoder();
+        const dataParts = [];
+
+        for (let f of currentFiles) {
+            const content = new Uint8Array(await f.arrayBuffer());
+            const header = encoder.encode(JSON.stringify({ n: f.name, t: f.type, s: content.length }));
+            const headerLen = new Uint32Array([header.length]);
+            dataParts.push(new Uint8Array(headerLen.buffer), header, content);
+        }
+
+        const combinedData = new Uint8Array(await new Blob(dataParts).arrayBuffer());
+        const salt = crypto.getRandomValues(new Uint8Array(16));
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        
+        const keyMaterial = await crypto.subtle.importKey("raw", encoder.encode(pw), "PBKDF2", false, ["deriveKey"]);
+        const key = await crypto.subtle.deriveKey(
+            { name: "PBKDF2", salt: salt, iterations: 600000, hash: "SHA-256" },
+            keyMaterial, { name: "AES-GCM", length: 256 }, false, ["encrypt"]
+        );
+        
+        const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, combinedData);
+        
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([salt, iv, encrypted]));
+        a.download = "tresor.neon";
+        a.click();
+        log.innerText = "FERTIG: tresor.neon gespeichert.";
+    }
+
+    async function unlock(pw) {
         const log = document.getElementById('log');
         const previewGrid = document.getElementById('previews');
-        if(!pw || currentFiles.length === 0) return alert("Passwort oder Datei fehlt!");
+        previewGrid.innerHTML = "";
 
         try {
             const fullData = new Uint8Array(await currentFiles[0].arrayBuffer());
@@ -162,39 +241,37 @@
 
             const keyMaterial = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveKey"]);
             const key = await crypto.subtle.deriveKey(
-                { name: "PBKDF2", salt: salt, iterations: 100000, hash: "SHA-256" },
+                { name: "PBKDF2", salt: salt, iterations: 600000, hash: "SHA-256" },
                 keyMaterial, { name: "AES-GCM", length: 256 }, false, ["decrypt"]
             );
 
             const decrypted = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, encrypted));
-            previewGrid.innerHTML = "";
+            
             let offset = 0;
+            const decoder = new TextDecoder();
             while (offset < decrypted.length) {
                 const headerLen = new Uint32Array(decrypted.slice(offset, offset + 4).buffer)[0];
                 offset += 4;
-                const header = JSON.parse(new TextDecoder().decode(decrypted.slice(offset, offset + headerLen)));
+                const header = JSON.parse(decoder.decode(decrypted.slice(offset, offset + headerLen)));
                 offset += headerLen;
                 const fileData = decrypted.slice(offset, offset + header.s);
                 offset += header.s;
 
-                const blob = new Blob([fileData], {type: header.t});
-                const url = URL.createObjectURL(blob);
+                const url = URL.createObjectURL(new Blob([fileData], {type: header.t}));
                 const div = document.createElement('div');
                 div.className = 'preview-item';
-                if(header.t.startsWith('image/')) div.innerHTML = `<img src="${url}">`;
-                else div.innerHTML = `<div style="font-size:2rem;">📄</div>`;
-                div.innerHTML += `<div style="font-size:0.7rem; margin:5px 0;">${header.n}</div>`;
                 
-                const btn = document.createElement('button');
-                btn.innerText = "Download";
-                btn.style.fontSize = "0.7rem";
-                btn.onclick = () => {
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = "OPEN_" + header.n;
-                    a.click();
-                };
-                div.appendChild(btn);
+                // Smart Icon Logic
+                let icon = `<div style="font-size:2rem; margin-bottom:5px;">📄</div>`;
+                if(header.t.startsWith('image/')) icon = `<img src="${url}">`;
+                else if(header.t.startsWith('video/')) icon = `<div style="font-size:2rem; margin-bottom:5px;">🎬</div>`;
+                else if(header.t.startsWith('audio/')) icon = `<div style="font-size:2rem; margin-bottom:5px;">🎵</div>`;
+                
+                div.innerHTML = `
+                    ${icon}
+                    <div style="font-size:0.7rem; margin:5px 0;">${header.n}</div>
+                    <a href="${url}" download="${header.n}" style="background:var(--neon); color:#000; padding:2px 8px; text-decoration:none; border-radius:4px; font-size:0.7rem; font-weight:bold;">Laden</a>
+                `;
                 previewGrid.appendChild(div);
             }
             log.innerText = "ERFOLG: Tresor geöffnet.";
@@ -202,4 +279,3 @@
     }
 </script>
 </body>
-</html>

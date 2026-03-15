@@ -16,6 +16,7 @@
 2. Dateien in die Drop-Zone ziehen.
 3. Starkes Passwort setzen (optional Keyfile aktivieren).
 4. `LOCK` zum Verschlüsseln oder `UNLOCK` zum Entschlüsseln nutzen.
+5. Bei sehr vielen Dateien erzeugt `LOCK` automatisch mehrere `.neon`-Teile (RAM-schonend/stabil).
 
 ## Kurz-Anleitung: Welches Profil wann?
 
@@ -40,6 +41,7 @@ Empfohlene Praxis:
 - Cloud-Mode mit zufälligem Dateinamen, Padding und `SHA-256`-Prüfdatei.
 - Zusätzliche Cloud-Härtung: wählbare Padding-Blockgröße + optionaler Tarnmodus (Decoy-Dateien).
 - Ganze Ordner verschlüsseln (Drag & Drop oder `Ordner wählen`).
+- RAM-schonendes LOCK-Batching: große Mengen werden automatisch in mehrere Vault-Teile aufgeteilt.
 - Keyfile für `LOCK` erzwingen.
 - Optionaler Recovery-Modus ohne Keyfile: 2. Passwort + 1–5 Sicherheitsfragen.
 - Passwort nach Aktion automatisch löschen.

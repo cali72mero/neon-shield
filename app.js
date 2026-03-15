@@ -10,6 +10,8 @@
     const LEGACY_KDF = { iterations: 600000, hash: "SHA-256" };
     const MAGIC_V2 = new TextEncoder().encode("NEON2");
     const FILE_HEADER_LENGTH_BYTES = 4;
+    const MAX_LOCK_BATCH_BYTES = 32 * 1024 * 1024;
+    const MAX_LOCK_BATCH_FILES = 80;
     const ACTIVITY_EVENTS = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
 
     const SECURITY_PROFILES = {
@@ -202,6 +204,10 @@
             doneCloudSuffix: "+ SHA-256-Hash exportiert (Cloud-Mode).",
             doneLock: "✅ FERTIG:",
             doneLockSuffix: "gespeichert. Profil:",
+            doneCloudMultiSuffix: "Teile + SHA-256-Hashes exportiert (Cloud-Mode).",
+            doneLockMultiSuffix: "Teile gespeichert. Profil:",
+            lockBatchRunning: "⏳ LOCK läuft: Teil",
+            lockBatchOf: "von",
             integrityCloud: "✅ INTEGRITÄTS-CHECK: OK. Tresor geöffnet (NEON2 Cloud-Mode).",
             integrityNeon2: "✅ INTEGRITÄTS-CHECK: OK. Tresor geöffnet (NEON2).",
             integrityLegacy: "✅ INTEGRITÄTS-CHECK: OK. Tresor geöffnet (Legacy).",
@@ -336,6 +342,10 @@
             doneCloudSuffix: "+ SHA-256 hash exported (Cloud mode).",
             doneLock: "✅ DONE:",
             doneLockSuffix: "saved. Profile:",
+            doneCloudMultiSuffix: "parts + SHA-256 hashes exported (Cloud mode).",
+            doneLockMultiSuffix: "parts saved. Profile:",
+            lockBatchRunning: "⏳ LOCK running: part",
+            lockBatchOf: "of",
             integrityCloud: "✅ INTEGRITY CHECK: OK. Vault opened (NEON2 Cloud mode).",
             integrityNeon2: "✅ INTEGRITY CHECK: OK. Vault opened (NEON2).",
             integrityLegacy: "✅ INTEGRITY CHECK: OK. Vault opened (Legacy).",
@@ -556,6 +566,22 @@
         return input;
     }
 
+    function hasFolderHierarchy(files) {
+        return Array.from(files || []).some((file) => {
+            const path = file.webkitRelativePath || file.vaultPath || "";
+            return String(path).includes("/");
+        });
+    }
+
+    function handleFolderSelection(files) {
+        const normalized = normalizeFilesWithVaultPath(files);
+        if (!hasFolderHierarchy(normalized)) {
+            showFolderUnsupportedMessage();
+            return;
+        }
+        handleFiles(normalized);
+    }
+
     async function openFolderPicker() {
         resetInactivityTimer();
 
@@ -583,21 +609,12 @@
                     cleanup();
                     return;
                 }
-                const normalized = normalizeFilesWithVaultPath(files);
-                const hasRelativePath = normalized.some((file) => (file.vaultPath || "").includes("/"));
-                handleFiles(normalized);
-                if (!hasRelativePath) {
-                    showFolderUnsupportedMessage();
-                }
+                handleFolderSelection(files);
                 cleanup();
             }, { once: true });
 
             try {
-                if (typeof tempInput.showPicker === "function") {
-                    await tempInput.showPicker();
-                } else {
-                    tempInput.click();
-                }
+                tempInput.click();
             } catch (error) {
                 cleanup();
                 if (error && error.name === "AbortError") return;
@@ -1276,7 +1293,7 @@
         e.target.value = "";
     });
     folderInput.addEventListener('change', (e) => {
-        handleFiles(e.target.files);
+        handleFolderSelection(e.target.files);
         e.target.value = "";
     });
 
@@ -1463,6 +1480,122 @@
         return "vault-" + ts + "-" + rand + ".neon";
     }
 
+    function getFileSizeSafe(file) {
+        const size = Number(file?.size);
+        return Number.isFinite(size) && size >= 0 ? size : 0;
+    }
+
+    function splitFilesIntoLockBatches(files) {
+        const source = Array.isArray(files) ? files : [];
+        const batches = [];
+        let batch = [];
+        let batchBytes = 0;
+
+        for (const file of source) {
+            const fileBytes = getFileSizeSafe(file);
+            const exceedsBytes = batch.length > 0 && (batchBytes + fileBytes) > MAX_LOCK_BATCH_BYTES;
+            const exceedsFiles = batch.length >= MAX_LOCK_BATCH_FILES;
+            if (exceedsBytes || exceedsFiles) {
+                batches.push(batch);
+                batch = [];
+                batchBytes = 0;
+            }
+            batch.push(file);
+            batchBytes += fileBytes;
+        }
+
+        if (batch.length > 0) {
+            batches.push(batch);
+        }
+        return batches;
+    }
+
+    function buildVaultPartFilename(baseName, partIndex, partCount) {
+        if (partCount <= 1) return baseName;
+        const part = String(partIndex).padStart(3, "0");
+        const total = String(partCount).padStart(3, "0");
+        if (baseName.toLowerCase().endsWith(".neon")) {
+            return baseName.slice(0, -5) + ".part" + part + "-of-" + total + ".neon";
+        }
+        return baseName + ".part" + part + "-of-" + total + ".neon";
+    }
+
+    async function buildVaultPayloadForBatch(files, encoder, cloudModeEnabled, addDecoys) {
+        const entries = [];
+        let totalLength = 0;
+
+        for (const file of files) {
+            const expectedSize = getFileSizeSafe(file);
+            const filePath = normalizeVaultPath(file.vaultPath || file.webkitRelativePath || file.name, file.name);
+            const headerBytes = encoder.encode(JSON.stringify({
+                n: filePath,
+                t: typeof file.type === "string" ? file.type : "",
+                s: expectedSize
+            }));
+            entries.push({ file: file, headerBytes: headerBytes, expectedSize: expectedSize });
+            totalLength += FILE_HEADER_LENGTH_BYTES + headerBytes.length + expectedSize;
+        }
+
+        const decoys = [];
+        if (cloudModeEnabled && addDecoys) {
+            const decoyCount = 1 + (randomBytes(1)[0] % 3);
+            for (let i = 0; i < decoyCount; i++) {
+                const name = ".mask-" + toHex(randomBytes(6)) + ".bin";
+                const sizeSeed = randomBytes(2);
+                const decoySize = 4096 + ((sizeSeed[0] << 8) | sizeSeed[1]) % 65536;
+                const decoyData = randomBytes(decoySize);
+                const decoyHeader = encoder.encode(JSON.stringify({
+                    n: name,
+                    t: "application/octet-stream",
+                    s: decoyData.length,
+                    d: 1
+                }));
+                decoys.push({ headerBytes: decoyHeader, data: decoyData });
+                totalLength += FILE_HEADER_LENGTH_BYTES + decoyHeader.length + decoyData.length;
+            }
+        }
+
+        let payload = new Uint8Array(totalLength);
+        let offset = 0;
+
+        for (const entry of entries) {
+            payload.set(writeUint32LE(entry.headerBytes.length), offset);
+            offset += FILE_HEADER_LENGTH_BYTES;
+            payload.set(entry.headerBytes, offset);
+            offset += entry.headerBytes.length;
+
+            const content = new Uint8Array(await entry.file.arrayBuffer());
+            if (content.length !== entry.expectedSize) {
+                throw new Error("Datei wurde waehrend LOCK veraendert. Bitte erneut versuchen.");
+            }
+            payload.set(content, offset);
+            offset += content.length;
+        }
+
+        for (const decoy of decoys) {
+            payload.set(writeUint32LE(decoy.headerBytes.length), offset);
+            offset += FILE_HEADER_LENGTH_BYTES;
+            payload.set(decoy.headerBytes, offset);
+            offset += decoy.headerBytes.length;
+            payload.set(decoy.data, offset);
+            offset += decoy.data.length;
+        }
+
+        let plainPad = 0;
+        if (cloudModeEnabled) {
+            const cloudPadUnit = getCloudPadUnitBytes();
+            plainPad = (cloudPadUnit - (payload.length % cloudPadUnit)) % cloudPadUnit;
+            if (plainPad > 0) {
+                const padded = new Uint8Array(payload.length + plainPad);
+                padded.set(payload, 0);
+                padded.set(randomBytes(plainPad), payload.length);
+                payload = padded;
+            }
+        }
+
+        return { payload: payload, plainPad: plainPad };
+    }
+
     function downloadBlob(blob, filename) {
         const a = document.createElement('a');
         const url = URL.createObjectURL(blob);
@@ -1579,35 +1712,10 @@
         const selectedProfileKey = cloudMode ? "fortress" : getSelectedProfileKey();
         const profile = SECURITY_PROFILES[selectedProfileKey];
 
-        const dataParts = [];
-        for (const f of currentFiles) {
-            const content = new Uint8Array(await f.arrayBuffer());
-            const filePath = normalizeVaultPath(f.vaultPath || f.webkitRelativePath || f.name, f.name);
-            const header = encoder.encode(JSON.stringify({ n: filePath, t: f.type, s: content.length }));
-            dataParts.push(writeUint32LE(header.length), header, content);
-        }
-
-        if (cloudMode && cloudChaffToggle.checked) {
-            const decoyCount = 1 + (randomBytes(1)[0] % 3);
-            for (let i = 0; i < decoyCount; i++) {
-                const name = ".mask-" + toHex(randomBytes(6)) + ".bin";
-                const sizeSeed = randomBytes(2);
-                const decoySize = 4096 + ((sizeSeed[0] << 8) | sizeSeed[1]) % 65536;
-                const decoyData = randomBytes(decoySize);
-                const decoyHeader = encoder.encode(JSON.stringify({ n: name, t: "application/octet-stream", s: decoyData.length, d: 1 }));
-                dataParts.push(writeUint32LE(decoyHeader.length), decoyHeader, decoyData);
-            }
-        }
-
-        let payload = new Uint8Array(await new Blob(dataParts).arrayBuffer());
-        let plainPad = 0;
-        if (cloudMode) {
-            const cloudPadUnit = getCloudPadUnitBytes();
-            plainPad = (cloudPadUnit - (payload.length % cloudPadUnit)) % cloudPadUnit;
-            if (plainPad > 0) {
-                payload = concatUint8(payload, randomBytes(plainPad));
-            }
-        }
+        const lockBatches = splitFilesIntoLockBatches(currentFiles);
+        const totalParts = lockBatches.length;
+        const baseOutName = generateVaultFilename(cloudMode);
+        const addDecoys = cloudMode && cloudChaffToggle.checked;
 
         let recoveryMeta = null;
         if (Array.isArray(recoveryPairs) && recoveryPairs.length > 0 && keyBytesForLock) {
@@ -1616,54 +1724,82 @@
             recoveryMeta = await buildRecoveryPackage(recoveryPassword, recoveryPairs, keyDigest);
         }
 
-        const envelopeMeta = {
-            v: 2,
-            kdf: { iterations: profile.iterations, hash: profile.hash },
-            layers: profile.layers,
-            km: profile.keyMaterialVersion || 2,
-            aad: 1,
-            padPlain: plainPad
-        };
-        if (cloudMode) {
-            envelopeMeta.cloud = 1;
-            envelopeMeta.padUnitMb = Number(cloudPadSelect.value || 1);
-            if (cloudChaffToggle.checked) envelopeMeta.chaff = 1;
+        for (let partIndex = 0; partIndex < totalParts; partIndex++) {
+            const partNumber = partIndex + 1;
+            if (totalParts > 1) {
+                log.innerText = t("lockBatchRunning") + " " + partNumber + " " + t("lockBatchOf") + " " + totalParts + "…";
+                log.style.color = "var(--caution)";
+            }
+
+            let payloadInfo = await buildVaultPayloadForBatch(lockBatches[partIndex], encoder, cloudMode, addDecoys);
+            let payload = payloadInfo.payload;
+            const plainPad = payloadInfo.plainPad;
+
+            const envelopeMeta = {
+                v: 2,
+                kdf: { iterations: profile.iterations, hash: profile.hash },
+                layers: profile.layers,
+                km: profile.keyMaterialVersion || 2,
+                aad: 1,
+                padPlain: plainPad
+            };
+            if (cloudMode) {
+                envelopeMeta.cloud = 1;
+                envelopeMeta.padUnitMb = Number(cloudPadSelect.value || 1);
+                if (cloudChaffToggle.checked) envelopeMeta.chaff = 1;
+            }
+            if (totalParts > 1) {
+                envelopeMeta.part = { i: partNumber, t: totalParts };
+            }
+            if (recoveryMeta) envelopeMeta.recovery = recoveryMeta;
+            const envelopeHeader = encoder.encode(JSON.stringify(envelopeMeta));
+
+            for (let layer = 1; layer <= profile.layers; layer++) {
+                const salt = randomBytes(16);
+                const iv = randomBytes(12);
+                const key = await deriveAesKey(
+                    pw,
+                    keyBytesForLock,
+                    salt,
+                    profile,
+                    "layer-" + layer,
+                    "encrypt",
+                    profile.keyMaterialVersion || 2
+                );
+                const aad = buildLayerAad(envelopeHeader, layer);
+                const encrypted = new Uint8Array(await crypto.subtle.encrypt(
+                    { name: "AES-GCM", iv: iv, additionalData: aad },
+                    key,
+                    payload
+                ));
+                payload = concatUint8(salt, iv, encrypted);
+            }
+
+            const outBytes = concatUint8(MAGIC_V2, writeUint32LE(envelopeHeader.length), envelopeHeader, payload);
+            const outName = buildVaultPartFilename(baseOutName, partNumber, totalParts);
+            downloadBlob(new Blob([outBytes], { type: "application/octet-stream" }), outName);
+
+            if (cloudMode) {
+                const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", outBytes));
+                const hashLine = toHex(digest) + "  " + outName + "\n";
+                downloadBlob(new Blob([hashLine], { type: "text/plain" }), outName + ".sha256.txt");
+            }
+
+            payloadInfo = null;
+            payload = new Uint8Array(0);
+            await new Promise((resolve) => setTimeout(resolve, 0));
         }
-        if (recoveryMeta) envelopeMeta.recovery = recoveryMeta;
-        const envelopeHeader = encoder.encode(JSON.stringify(envelopeMeta));
-
-        for (let layer = 1; layer <= profile.layers; layer++) {
-            const salt = randomBytes(16);
-            const iv = randomBytes(12);
-            const key = await deriveAesKey(
-                pw,
-                keyBytesForLock,
-                salt,
-                profile,
-                "layer-" + layer,
-                "encrypt",
-                profile.keyMaterialVersion || 2
-            );
-            const aad = buildLayerAad(envelopeHeader, layer);
-            const encrypted = new Uint8Array(await crypto.subtle.encrypt(
-                { name: "AES-GCM", iv: iv, additionalData: aad },
-                key,
-                payload
-            ));
-            payload = concatUint8(salt, iv, encrypted);
-        }
-
-        const outBytes = concatUint8(MAGIC_V2, writeUint32LE(envelopeHeader.length), envelopeHeader, payload);
-        const outName = generateVaultFilename(cloudMode);
-        downloadBlob(new Blob([outBytes], { type: "application/octet-stream" }), outName);
 
         if (cloudMode) {
-            const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", outBytes));
-            const hashLine = toHex(digest) + "  " + outName + "\n";
-            downloadBlob(new Blob([hashLine], { type: "text/plain" }), outName + ".sha256.txt");
-            log.innerText = t("doneCloud") + " " + outName + " " + t("doneCloudSuffix");
+            if (totalParts > 1) {
+                log.innerText = t("doneCloud") + " " + totalParts + " " + t("doneCloudMultiSuffix");
+            } else {
+                log.innerText = t("doneCloud") + " " + baseOutName + " " + t("doneCloudSuffix");
+            }
+        } else if (totalParts > 1) {
+            log.innerText = t("doneLock") + " " + totalParts + " " + t("doneLockMultiSuffix") + " " + profile.label + " (" + profile.layers + " Layer).";
         } else {
-            log.innerText = t("doneLock") + " " + outName + " " + t("doneLockSuffix") + " " + profile.label + " (" + profile.layers + " Layer).";
+            log.innerText = t("doneLock") + " " + baseOutName + " " + t("doneLockSuffix") + " " + profile.label + " (" + profile.layers + " Layer).";
         }
         log.style.color = "var(--success)";
         setLockSecurityReport(profile, cloudMode);

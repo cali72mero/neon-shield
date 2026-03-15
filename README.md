@@ -1,50 +1,45 @@
-# NEON-SHIELD Web (v1.7)
+# NEON-SHIELD Web
 
-Diese README beschreibt die aktuelle Web-Version (`index.html` + `app.js`): was sie kann, was sie nicht kann und welche Sicherheitsgrenzen wichtig sind.
+<p align="center">
+  <a href="./index.html"><img alt="App starten" src="https://img.shields.io/badge/App-starten-00f2ff?style=for-the-badge&logo=icloud&logoColor=black"></a>
+  <a href="./README_NEON_SHIELD_WEB.md"><img alt="Security Details" src="https://img.shields.io/badge/Security-Details-0f172a?style=for-the-badge&logo=shield&logoColor=white"></a>
+  <a href="./app.js"><img alt="Quellcode ansehen" src="https://img.shields.io/badge/Quellcode-JavaScript-111827?style=for-the-badge&logo=javascript&logoColor=f7df1e"></a>
+</p>
 
-## Was die Webseite kann
+<p align="center">
+  Lokale Dateiverschlüsselung im Browser mit <b>AES-256-GCM</b>, Keyfile-Option, Cloud-Mode und DE/EN-Sprachumschaltung.
+</p>
 
-- Dateien lokal im Browser verschlüsseln (`LOCK`) und als `.neon` speichern.
-- `.neon`-Dateien lokal entschlüsseln (`UNLOCK`) und Inhalte wieder herunterladen.
-- AES-256-GCM mit Integritätsprüfung (manipulierte Daten werden erkannt).
-- Sicherheitsprofile:
-  - `Balanced`: PBKDF2-SHA256, 600k, 1 Layer
-  - `Hardened`: PBKDF2-SHA512, 1.2M, 1 Layer
-  - `Fortress`: PBKDF2-SHA512, 1.5M, 2 Layer
-- Optional Keyfile als zusätzlicher Faktor (Passwort + Datei).
-- Cloud-Mode:
-  - random Dateiname
-  - Padding gegen grobe Größenleaks
-  - SHA-256 Hash-Datei zur Integritätskontrolle
-- NEON2-Format für neue Tresore + Legacy-Unterstützung für ältere `.neon`-Dateien.
-- CSP/Runtime-Härtung gegen Netzwerkausleitungen (`connect-src 'none'`, gesperrte Netzwerk-APIs).
-- Host-Guard: Kryptofunktionen sind nur in erlaubten Kontexten nutzbar (`file://`, `localhost`, `https://*.github.io`).
+## Schnellstart
 
-## Was die Webseite nicht kann
+1. `index.html` im Browser öffnen.
+2. Dateien in die Drop-Zone ziehen.
+3. Starkes Passwort setzen (optional Keyfile aktivieren).
+4. `LOCK` zum Verschlüsseln oder `UNLOCK` zum Entschlüsseln nutzen.
 
-- Kein „100% unknackbar“ garantieren.
-- Kein Passwort-Reset oder Wiederherstellung bei verlorenem Passwort.
-- Keine echte Hardware-Bindung an Secure Enclave/Keychain (Browser-Grenze).
-- Keine forensisch harte Speicherlöschung wie in nativen Sicherheitsanwendungen.
-- Kein automatisches Cloud-Sync/Account-System (bewusst lokal/zero-knowledge gehalten).
-- Kein eingebautes Argon2id ohne zusätzliche lokale Kryptobibliothek.
+## Was die App kann
 
-## Sicherheitsmodell (kurz)
+- AES-256-GCM mit Integritätsprüfung.
+- Sicherheitsprofile: `Balanced`, `Hardened`, `Fortress`.
+- Optionales Keyfile als zweiter Faktor.
+- Cloud-Mode mit zufälligem Dateinamen, Padding und `SHA-256`-Prüfdatei.
+- Keyfile für `LOCK` erzwingen.
+- Passwort nach Aktion automatisch löschen.
+- Auto-Lock bei Inaktivität.
+- DE/EN direkt in der Oberfläche umschalten.
 
-- Verschlüsselung und Entschlüsselung laufen clientseitig.
-- Der Betreiber soll keine Klartextdaten/Passwörter erhalten.
-- Trotzdem gilt: Wenn der ausgelieferte Webseiten-Code manipuliert wird, kann Sicherheit unterlaufen werden.
+## Was die App nicht kann
 
-## Praktische Empfehlungen
+- Kein „Passwort vergessen“: Ohne korrektes Passwort/Keyfile ist keine Wiederherstellung möglich.
+- Kein System ist „100 % unknackbar“.
+- Eine Browser-App kann Manipulationen am Endgerät oder unsichere Browser-Umgebungen nicht vollständig verhindern.
 
-1. Immer langes, starkes Passwort nutzen.
-2. Für wichtige Daten zusätzlich Keyfile aktivieren.
-3. Für Upload/Backup in Cloud den Cloud-Mode verwenden.
-4. Datei möglichst lokal/offline oder nur auf eigener, vertrauenswürdiger Domain ausführen.
-5. `*.sha256.txt` bei Cloud-Backups mitprüfen.
+## Projektdateien
 
-## Dateiformat-Hinweis
+- `index.html` – Oberfläche und Layout.
+- `app.js` – Kryptologik, i18n, Sicherheitsoptionen.
+- `README_NEON_SHIELD_WEB.md` – ausführliche Sicherheitsdetails.
 
-- Neu: `NEON2` (versionierter Header, KDF-/Layer-Metadaten, AAD-gebundene Header-Integrität, optional Padding/Cloud-Flag).
-- Alt: Legacy-Format wird beim Entschlüsseln weiterhin unterstützt.
+## Sicherheits-Hinweis
 
+Für maximalen Schutz: langes Passwort + Keyfile nutzen und bei Cloud-Backups die erzeugte `*.sha256.txt` Datei mitprüfen.

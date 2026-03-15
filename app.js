@@ -1,11 +1,14 @@
     let currentFiles = [];
     let keyfileBytes = null;
+    let keyfileDisplayName = "";
+    let inactivityTimer = null;
+    const previewObjectUrls = [];
 
     const LEGACY_KDF = { iterations: 600000, hash: "SHA-256" };
     const MAGIC_V2 = new TextEncoder().encode("NEON2");
     const FILE_HEADER_LENGTH_BYTES = 4;
     const CLOUD_PAD_UNIT = 1024 * 1024;
-    const TRUSTED_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+    const ACTIVITY_EVENTS = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
 
     const SECURITY_PROFILES = {
         balanced: {
@@ -13,21 +16,21 @@
             iterations: 600000,
             hash: "SHA-256",
             layers: 1,
-            hint: "Schnell und stark. Gute Standardwahl fuer normale Nutzung."
+            hint: "Schnell und stark. Gute Standardwahl für normale Nutzung."
         },
         hardened: {
             label: "Hardened",
             iterations: 1200000,
             hash: "SHA-512",
             layers: 1,
-            hint: "Hoehere brute-force Kosten, aber merkbar langsamer bei alten Geraeten."
+            hint: "Höhere Brute-Force-Kosten, aber merkbar langsamer bei älteren Geräten."
         },
         fortress: {
             label: "Fortress",
             iterations: 1500000,
             hash: "SHA-512",
             layers: 2,
-            hint: "Maximale lokale Haerte: hohe KDF-Kosten + doppelte AES-GCM-Verschluesselung."
+            hint: "Maximale lokale Härte: hohe KDF-Kosten + doppelte AES-GCM-Verschlüsselung."
         }
     };
 
@@ -35,13 +38,16 @@
     const fileInput = document.getElementById('file-input');
     const fileInfo = document.getElementById('file-info');
     const overlay = document.getElementById('loading-overlay');
-    const hostWarning = document.getElementById('host-warning');
     const passInput = document.getElementById('pass');
     const strengthFill = document.getElementById('strength-fill');
     const profileSelect = document.getElementById('security-profile');
     const profileHint = document.getElementById('profile-hint');
     const cloudModeToggle = document.getElementById('cloud-mode-toggle');
     const cloudModeHint = document.getElementById('cloud-mode-hint');
+    const requireKeyfileToggle = document.getElementById('require-keyfile-toggle');
+    const clearSecretToggle = document.getElementById('clear-secret-toggle');
+    const autoLockSelect = document.getElementById('auto-lock-select');
+    const securityReportEl = document.getElementById('security-report');
     const keyfileToggle = document.getElementById('keyfile-toggle');
     const passToggle = document.getElementById('toggle-pass');
     const lockButton = document.getElementById('lock-btn');
@@ -50,26 +56,390 @@
     const keyfileDrop = document.getElementById('keyfile-drop');
     const keyfileInput = document.getElementById('keyfile-input');
     const trustState = { ok: true, reason: "" };
+    let currentLang = "de";
+
+    const I18N = {
+        de: {
+            headerSubtitle: "Open Source auf GitHub | Entwickelt von einem Einzelentwickler",
+            guideTitle: "📖 Anleitung & Sicherheit",
+            guideIntro: "Schütze deine privaten Dateien direkt auf deinem Gerät, ohne Cloud-Zwang.",
+            guideB1: "<strong>Verschlüsselung:</strong> AES-256-GCM mit Integritätsprüfung. Manipulierte Daten werden erkannt.",
+            guideB2: "<strong>LOCK:</strong> Dateien auswählen, starkes Passwort setzen, optional Keyfile hinzufügen, dann Tresor erzeugen.",
+            guideB3: "<strong>UNLOCK:</strong> <code>.neon</code>-Datei laden, Passwort (und ggf. Keyfile) eingeben, Inhalte sicher wiederherstellen.",
+            guideB4: "<strong>Cloud-Mode:</strong> Für Backups mit anonymisiertem Dateinamen, Padding und SHA-256-Prüfdatei.",
+            guideAlert: "⚠️ WICHTIG: Ohne korrektes Passwort (und ggf. Keyfile) ist eine Wiederherstellung nicht möglich.",
+            guidePrivacy: "<strong>Datenschutz:</strong> Verschlüsselung und Entschlüsselung laufen im Browser. Du entscheidest selbst, wo du die erzeugten Dateien speicherst.",
+            filesTitle: "01_DATEIEN AUSWÄHLEN",
+            dropText: "Dateien hierher ziehen oder klicken",
+            noFiles: "Keine Dateien geladen.",
+            filesReadySuffix: "Datei(en) bereit",
+            securityTitle: "02_SICHERHEITS-SCHLÜSSEL",
+            passPlaceholder: "Dein Master-Passwort...",
+            keyfileLabel: "📂 „Schlüssel-Datei“ (Keyfile) als 2-Faktor-Schutz nutzen (optional)",
+            keyfileDropTitle: "[HIER KEYFILE ZIEHEN]",
+            keyfileDropSub: "Bild, MP3 oder beliebige Datei als Schlüssel nutzen",
+            profileLabel: "🔐 Sicherheitsprofil (für neue LOCK-Dateien)",
+            profileBalanced: "Balanced | PBKDF2-SHA256 | 600k | 1 Layer",
+            profileHardened: "Hardened | PBKDF2-SHA512 | 1,2M | 1 Layer",
+            profileFortress: "Fortress | PBKDF2-SHA512 | 1,5M | 2 Layer",
+            cloudLabel: "☁️ Cloud-Mode (Zero-Knowledge): zufälliger Dateiname, Padding, Integritäts-Hash",
+            cloudHintOn: "Cloud-Mode aktiv: Fortress + Keyfile-Pflicht + SHA-256-Hash zur Upload-Kontrolle.",
+            cloudHintOff: "Für Cloud-Backup ohne Klartextdaten. Empfohlen mit Keyfile.",
+            requireKeyfileLabel: "Keyfile für LOCK erzwingen (empfohlen für sensible Daten)",
+            clearSecretLabel: "Passwort nach jeder Aktion automatisch löschen",
+            autoLockLabel: "Auto-Lock bei Inaktivität",
+            autoLockOff: "Aus",
+            autoLock5: "5 Minuten",
+            autoLock10: "10 Minuten",
+            autoLock30: "30 Minuten",
+            autoLockHint: "Auto-Lock leert Passwort und Vorschau automatisch nach Inaktivität.",
+            lockBtn: "🔒 LOCK (.neon)",
+            unlockBtn: "🔓 UNLOCK",
+            versionText: "Version: 1.8 (Aktuell)",
+            footerText: "Ich bin ein Einzelentwickler und gebe mein Bestes, diese Webseite ständig zu verbessern. Wenn du Fehler findest oder Vorschläge hast, melde dich gerne:",
+            copyrightText: "© 2025 Neon-Shield Project. 100 % Datenschutz-Fokus.",
+            profileHintBalanced: "Schnell und stark. Gute Standardwahl für normale Nutzung.",
+            profileHintHardened: "Höhere Brute-Force-Kosten, aber spürbar langsamer auf älteren Geräten.",
+            profileHintFortress: "Maximale lokale Härte: hohe KDF-Kosten + doppelte AES-GCM-Verschlüsselung.",
+            trustContextError: "Unsicherer Kontext (ohne HTTPS).",
+            blockedContext: "❌ BLOCKIERT: Kryptofunktionen nur in sicherem Kontext erlaubt.",
+            errorNoPassword: "❌ Fehler: Passwort fehlt!",
+            errorNoFiles: "❌ Fehler: Keine Dateien!",
+            errorKeyfileMissing: "❌ Fehler: Keyfile aktiviert, aber keine Datei gewählt!",
+            errorCloudNeedsKeyfile: "❌ Cloud-Mode braucht zwingend eine Keyfile.",
+            errorRequireKeyfile: "❌ LOCK blockiert: Diese Einstellung verlangt eine Keyfile.",
+            errorPasswordShort: "❌ LOCK blockiert: Nutze mindestens 10 Zeichen Passwort.",
+            weakConfirm: "Passwort ist eher schwach. Trotzdem fortfahren?",
+            weakAbort: "⚠️ Abgebrochen: Bitte stärkeres Passwort wählen.",
+            cryptoError: "❌ FEHLER / INTEGRITÄTS-CHECK GESCHEITERT!\n(Falsches Passwort/Keyfile oder Datei beschädigt)",
+            keyfileLoaded: "✅ Keyfile geladen:",
+            doneCloud: "✅ FERTIG:",
+            doneCloudSuffix: "+ SHA-256-Hash exportiert (Cloud-Mode).",
+            doneLock: "✅ FERTIG:",
+            doneLockSuffix: "gespeichert. Profil:",
+            integrityCloud: "✅ INTEGRITÄTS-CHECK: OK. Tresor geöffnet (NEON2 Cloud-Mode).",
+            integrityNeon2: "✅ INTEGRITÄTS-CHECK: OK. Tresor geöffnet (NEON2).",
+            integrityLegacy: "✅ INTEGRITÄTS-CHECK: OK. Tresor geöffnet (Legacy).",
+            previewDownload: "Laden",
+            autoLockTriggered: "🔒 Auto-Lock: Passwort und Vorschau wurden wegen Inaktivität gelöscht.",
+            networkDisabled: "Netzwerkzugriff ist in diesem Build deaktiviert.",
+            securityReportTitle: "Schutzbericht",
+            reportMode: "Modus",
+            reportModeLock: "LOCK",
+            reportModeUnlock: "UNLOCK",
+            reportProfile: "Profil",
+            reportKdf: "KDF",
+            reportLayers: "Layer",
+            reportKeyfile: "Keyfile",
+            reportLegacy: "Legacy",
+            reportYes: "Ja",
+            reportNo: "Nein",
+            reportAad: "Header-AAD",
+            reportCloud: "Cloud-Hash",
+            reportActive: "Aktiv",
+            reportEmpty: "Noch kein Sicherheitsbericht verfügbar."
+        },
+        en: {
+            headerSubtitle: "Open Source on GitHub | Built by a solo developer",
+            guideTitle: "📖 Guide & Security",
+            guideIntro: "Protect your private files directly on your device, without forced cloud usage.",
+            guideB1: "<strong>Encryption:</strong> AES-256-GCM with integrity verification. Tampered data is detected.",
+            guideB2: "<strong>LOCK:</strong> Select files, set a strong password, optionally add a keyfile, then create your vault.",
+            guideB3: "<strong>UNLOCK:</strong> Load a <code>.neon</code> file, enter password (and keyfile if used), then recover your files securely.",
+            guideB4: "<strong>Cloud mode:</strong> For backups with randomized filename, padding, and SHA-256 verification file.",
+            guideAlert: "⚠️ IMPORTANT: Without the correct password (and keyfile, if enabled), recovery is not possible.",
+            guidePrivacy: "<strong>Privacy:</strong> Encryption and decryption happen in your browser. You decide where generated files are stored.",
+            filesTitle: "01_SELECT FILES",
+            dropText: "Drag files here or click",
+            noFiles: "No files loaded.",
+            filesReadySuffix: "file(s) ready",
+            securityTitle: "02_SECURITY KEY",
+            passPlaceholder: "Your master password...",
+            keyfileLabel: "📂 Use a keyfile as 2nd factor (optional)",
+            keyfileDropTitle: "[DROP KEYFILE HERE]",
+            keyfileDropSub: "Use image, MP3 or any file as key",
+            profileLabel: "🔐 Security profile (for new LOCK files)",
+            profileBalanced: "Balanced | PBKDF2-SHA256 | 600k | 1 layer",
+            profileHardened: "Hardened | PBKDF2-SHA512 | 1.2M | 1 layer",
+            profileFortress: "Fortress | PBKDF2-SHA512 | 1.5M | 2 layers",
+            cloudLabel: "☁️ Cloud mode (Zero-Knowledge): random filename, padding, integrity hash",
+            cloudHintOn: "Cloud mode active: Fortress + required keyfile + SHA-256 upload verification.",
+            cloudHintOff: "For cloud backups without plaintext leakage. Keyfile recommended.",
+            requireKeyfileLabel: "Require keyfile for LOCK (recommended for sensitive data)",
+            clearSecretLabel: "Auto-clear password after each action",
+            autoLockLabel: "Auto-lock on inactivity",
+            autoLockOff: "Off",
+            autoLock5: "5 minutes",
+            autoLock10: "10 minutes",
+            autoLock30: "30 minutes",
+            autoLockHint: "Auto-lock clears password and preview after inactivity.",
+            lockBtn: "🔒 LOCK (.neon)",
+            unlockBtn: "🔓 UNLOCK",
+            versionText: "Version: 1.8 (Current)",
+            footerText: "I'm a solo developer and constantly improving this website. If you find issues or have ideas, contact me:",
+            copyrightText: "© 2025 Neon-Shield Project. 100% privacy focused.",
+            profileHintBalanced: "Fast and strong. Good default for normal usage.",
+            profileHintHardened: "Higher brute-force cost, but noticeably slower on older devices.",
+            profileHintFortress: "Maximum local hardness: high KDF cost + double AES-GCM encryption.",
+            trustContextError: "Insecure context (no HTTPS).",
+            blockedContext: "❌ BLOCKED: Crypto functions are only allowed in a secure context.",
+            errorNoPassword: "❌ Error: Password missing!",
+            errorNoFiles: "❌ Error: No files selected!",
+            errorKeyfileMissing: "❌ Error: Keyfile enabled, but no file selected!",
+            errorCloudNeedsKeyfile: "❌ Cloud mode requires a keyfile.",
+            errorRequireKeyfile: "❌ LOCK blocked: This setting requires a keyfile.",
+            errorPasswordShort: "❌ LOCK blocked: Use at least 10 password characters.",
+            weakConfirm: "Password looks weak. Continue anyway?",
+            weakAbort: "⚠️ Aborted: Please choose a stronger password.",
+            cryptoError: "❌ ERROR / INTEGRITY CHECK FAILED!\n(Wrong password/keyfile or damaged file)",
+            keyfileLoaded: "✅ Keyfile loaded:",
+            doneCloud: "✅ DONE:",
+            doneCloudSuffix: "+ SHA-256 hash exported (Cloud mode).",
+            doneLock: "✅ DONE:",
+            doneLockSuffix: "saved. Profile:",
+            integrityCloud: "✅ INTEGRITY CHECK: OK. Vault opened (NEON2 Cloud mode).",
+            integrityNeon2: "✅ INTEGRITY CHECK: OK. Vault opened (NEON2).",
+            integrityLegacy: "✅ INTEGRITY CHECK: OK. Vault opened (Legacy).",
+            previewDownload: "Download",
+            autoLockTriggered: "🔒 Auto-lock: Password and previews were cleared due to inactivity.",
+            networkDisabled: "Network access is disabled in this build.",
+            securityReportTitle: "Security Report",
+            reportMode: "Mode",
+            reportModeLock: "LOCK",
+            reportModeUnlock: "UNLOCK",
+            reportProfile: "Profile",
+            reportKdf: "KDF",
+            reportLayers: "Layers",
+            reportKeyfile: "Keyfile",
+            reportLegacy: "Legacy",
+            reportYes: "Yes",
+            reportNo: "No",
+            reportAad: "Header-AAD",
+            reportCloud: "Cloud hash",
+            reportActive: "Active",
+            reportEmpty: "No security report yet."
+        }
+    };
+
+    function t(key) {
+        const table = I18N[currentLang] || I18N.de;
+        return table[key] || key;
+    }
+
+    function setSecurityReport(lines) {
+        if (!securityReportEl) return;
+        const normalized = Array.isArray(lines) ? lines : [];
+        securityReportEl.textContent = normalized.length > 0 ? normalized.join("\n") : t("reportEmpty");
+    }
+
+    function getYesNoLabel(flag) {
+        return flag ? t("reportYes") : t("reportNo");
+    }
+
+    function updateFileInfo() {
+        if (!fileInfo) return;
+        if (currentFiles.length > 0) {
+            fileInfo.innerText = currentFiles.length + " " + t("filesReadySuffix") + ": " + currentFiles.map((f) => f.name).join(", ");
+            fileInfo.style.color = "var(--neon)";
+            return;
+        }
+        fileInfo.innerText = t("noFiles");
+        fileInfo.style.color = "inherit";
+    }
+
+    function updateKeyfileStatus() {
+        const nameEl = document.getElementById('keyfile-name');
+        if (!nameEl) return;
+        if (!keyfileDisplayName) {
+            nameEl.innerText = "";
+            return;
+        }
+        nameEl.innerText = t("keyfileLoaded") + " " + keyfileDisplayName;
+    }
+
+    function wipePreviewUrls() {
+        while (previewObjectUrls.length > 0) {
+            const url = previewObjectUrls.pop();
+            URL.revokeObjectURL(url);
+        }
+    }
+
+    function clearPreviewGrid() {
+        const previewGrid = document.getElementById('previews');
+        if (!previewGrid) return;
+        wipePreviewUrls();
+        previewGrid.innerHTML = "";
+    }
+
+    function wipeKeyfileBytes() {
+        if (keyfileBytes instanceof Uint8Array) {
+            keyfileBytes.fill(0);
+        }
+        keyfileBytes = null;
+    }
+
+    function clearSensitiveUiState(reasonKey) {
+        passInput.value = "";
+        updatePasswordStrength();
+        clearPreviewGrid();
+        if (reasonKey) {
+            const log = document.getElementById('log');
+            if (log) {
+                log.innerText = t(reasonKey);
+                log.style.color = "var(--caution)";
+            }
+        }
+    }
+
+    function resetInactivityTimer() {
+        if (inactivityTimer) {
+            clearTimeout(inactivityTimer);
+            inactivityTimer = null;
+        }
+        const minutes = Number(autoLockSelect.value || 0);
+        if (!Number.isFinite(minutes) || minutes <= 0) return;
+        inactivityTimer = setTimeout(() => {
+            clearSensitiveUiState("autoLockTriggered");
+        }, minutes * 60 * 1000);
+    }
+
+    function updateAutoLockWatchers() {
+        ACTIVITY_EVENTS.forEach((eventName) => {
+            window.removeEventListener(eventName, resetInactivityTimer);
+        });
+        const enabled = Number(autoLockSelect.value || 0) > 0;
+        if (!enabled) {
+            if (inactivityTimer) {
+                clearTimeout(inactivityTimer);
+                inactivityTimer = null;
+            }
+            return;
+        }
+        ACTIVITY_EVENTS.forEach((eventName) => {
+            window.addEventListener(eventName, resetInactivityTimer, { passive: true });
+        });
+        resetInactivityTimer();
+    }
+
+    function setLockSecurityReport(profile, cloudModeEnabled) {
+        setSecurityReport([
+            t("securityReportTitle"),
+            t("reportMode") + ": " + t("reportModeLock"),
+            t("reportProfile") + ": " + profile.label,
+            t("reportKdf") + ": PBKDF2-" + profile.hash + " / " + profile.iterations,
+            t("reportLayers") + ": " + profile.layers,
+            t("reportKeyfile") + ": " + getYesNoLabel(Boolean(keyfileBytes)),
+            t("reportAad") + ": " + t("reportActive"),
+            t("reportCloud") + ": " + getYesNoLabel(cloudModeEnabled)
+        ]);
+    }
+
+    function setUnlockSecurityReport(useV2, header) {
+        if (useV2 && header) {
+            const hash = typeof header.kdf?.hash === "string" ? header.kdf.hash : "SHA-256";
+            const iterations = Number.isInteger(header.kdf?.iterations) ? header.kdf.iterations : LEGACY_KDF.iterations;
+            const layers = Number.isInteger(header.layers) ? header.layers : 1;
+            setSecurityReport([
+                t("securityReportTitle"),
+                t("reportMode") + ": " + t("reportModeUnlock"),
+                t("reportProfile") + ": NEON2",
+                t("reportKdf") + ": PBKDF2-" + hash + " / " + iterations,
+                t("reportLayers") + ": " + layers,
+                t("reportKeyfile") + ": " + getYesNoLabel(Boolean(keyfileBytes)),
+                t("reportAad") + ": " + (header.aad === 1 ? t("reportActive") : t("reportNo")),
+                t("reportCloud") + ": " + getYesNoLabel(header.cloud === 1)
+            ]);
+            return;
+        }
+
+        setSecurityReport([
+            t("securityReportTitle"),
+            t("reportMode") + ": " + t("reportModeUnlock"),
+            t("reportProfile") + ": " + t("reportLegacy"),
+            t("reportKdf") + ": PBKDF2-" + LEGACY_KDF.hash + " / " + LEGACY_KDF.iterations,
+            t("reportLayers") + ": 1",
+            t("reportKeyfile") + ": " + getYesNoLabel(Boolean(keyfileBytes)),
+            t("reportAad") + ": " + t("reportNo"),
+            t("reportCloud") + ": " + t("reportNo")
+        ]);
+    }
+
+    function applyStaticTranslations() {
+        document.getElementById("header-subtitle").textContent = t("headerSubtitle");
+        document.getElementById("guide-title").textContent = t("guideTitle");
+        document.getElementById("guide-intro").textContent = t("guideIntro");
+        document.getElementById("guide-b1").innerHTML = t("guideB1");
+        document.getElementById("guide-b2").innerHTML = t("guideB2");
+        document.getElementById("guide-b3").innerHTML = t("guideB3");
+        document.getElementById("guide-b4").innerHTML = t("guideB4");
+        document.getElementById("guide-alert").textContent = t("guideAlert");
+        document.getElementById("guide-privacy").innerHTML = t("guidePrivacy");
+        document.getElementById("files-title").textContent = t("filesTitle");
+        document.getElementById("drop-text").textContent = t("dropText");
+        document.getElementById("security-title").textContent = t("securityTitle");
+        passInput.placeholder = t("passPlaceholder");
+        document.getElementById("keyfile-label").textContent = t("keyfileLabel");
+        document.getElementById("keyfile-drop-title").textContent = t("keyfileDropTitle");
+        document.getElementById("keyfile-drop-sub").textContent = t("keyfileDropSub");
+        document.getElementById("profile-label").textContent = t("profileLabel");
+        document.getElementById("profile-balanced").textContent = t("profileBalanced");
+        document.getElementById("profile-hardened").textContent = t("profileHardened");
+        document.getElementById("profile-fortress").textContent = t("profileFortress");
+        document.getElementById("cloud-label").textContent = t("cloudLabel");
+        document.getElementById("require-keyfile-label").textContent = t("requireKeyfileLabel");
+        document.getElementById("clear-secret-label").textContent = t("clearSecretLabel");
+        document.getElementById("auto-lock-label").textContent = t("autoLockLabel");
+        document.getElementById("auto-lock-off").textContent = t("autoLockOff");
+        document.getElementById("auto-lock-5").textContent = t("autoLock5");
+        document.getElementById("auto-lock-10").textContent = t("autoLock10");
+        document.getElementById("auto-lock-30").textContent = t("autoLock30");
+        document.getElementById("auto-lock-hint").textContent = t("autoLockHint");
+        lockButton.textContent = t("lockBtn");
+        unlockButton.textContent = t("unlockBtn");
+        document.getElementById("version-text").textContent = t("versionText");
+        document.getElementById("footer-text").textContent = t("footerText");
+        document.getElementById("copyright-text").textContent = t("copyrightText");
+        document.title = currentLang === "en"
+            ? "NEON-SHIELD V1.8 | Military-grade data vault"
+            : "NEON-SHIELD V1.8 | Militärischer Datentresor";
+    }
+
+    function setLanguage(lang) {
+        currentLang = lang === "en" ? "en" : "de";
+        localStorage.setItem("neon-lang", currentLang);
+        document.documentElement.lang = currentLang;
+        document.getElementById("lang-de").classList.toggle("active", currentLang === "de");
+        document.getElementById("lang-en").classList.toggle("active", currentLang === "en");
+        applyStaticTranslations();
+        updateProfileHint();
+        updateFileInfo();
+        updateKeyfileStatus();
+        document.querySelectorAll("#previews a").forEach((link) => {
+            link.textContent = t("previewDownload");
+        });
+        setSecurityReport([]);
+        const ctx = evaluateTrustedContext();
+        trustState.ok = ctx.ok;
+        trustState.reason = ctx.reason;
+    }
 
     function evaluateTrustedContext() {
         const protocol = window.location.protocol;
-        const hostname = window.location.hostname;
         const localFile = protocol === "file:";
-        const localHost = (protocol === "http:" || protocol === "https:") && TRUSTED_HOSTS.has(hostname);
-        const githubPages = protocol === "https:" && hostname.endsWith(".github.io");
-        if (localFile || localHost || githubPages) return { ok: true, reason: "" };
+        const secureWeb = protocol === "https:" && window.isSecureContext;
+        if (localFile || secureWeb) return { ok: true, reason: "" };
         return {
             ok: false,
-            reason: "Remote-Host '" + window.location.host + "' ist nicht als lokal vertrauenswuerdig markiert."
+            reason: t("trustContextError")
         };
     }
 
     function lockDownNetworkApis() {
-        const networkError = new Error("Netzwerkzugriff ist in diesem Build deaktiviert.");
+        const createNetworkError = () => new Error(t("networkDisabled"));
 
         try {
             if (typeof window.fetch === "function") {
-                window.fetch = async function () { throw networkError; };
+                window.fetch = async function () { throw createNetworkError(); };
             }
         } catch {}
 
@@ -82,26 +452,26 @@
         try {
             if (typeof window.XMLHttpRequest === "function") {
                 const xhrProto = window.XMLHttpRequest.prototype;
-                xhrProto.open = function () { throw networkError; };
-                xhrProto.send = function () { throw networkError; };
+                xhrProto.open = function () { throw createNetworkError(); };
+                xhrProto.send = function () { throw createNetworkError(); };
             }
         } catch {}
 
         try {
             if (typeof window.WebSocket === "function") {
-                window.WebSocket = function () { throw networkError; };
+                window.WebSocket = function () { throw createNetworkError(); };
             }
         } catch {}
 
         try {
             if (typeof window.EventSource === "function") {
-                window.EventSource = function () { throw networkError; };
+                window.EventSource = function () { throw createNetworkError(); };
             }
         } catch {}
 
         try {
             if (typeof window.RTCPeerConnection === "function") {
-                window.RTCPeerConnection = function () { throw networkError; };
+                window.RTCPeerConnection = function () { throw createNetworkError(); };
             }
         } catch {}
     }
@@ -111,15 +481,11 @@
         const ctx = evaluateTrustedContext();
         trustState.ok = ctx.ok;
         trustState.reason = ctx.reason;
-        if (!ctx.ok) {
-            hostWarning.style.display = "block";
-            hostWarning.innerText = "⚠️ Unsicherer Host-Kontext erkannt: " + ctx.reason + " Erlaubt sind nur file://, localhost oder https://*.github.io.";
-        }
     }
 
     function assertTrustedContext(logEl) {
         if (trustState.ok) return true;
-        logEl.innerText = "❌ BLOCKIERT: Kryptofunktionen nur lokal/offline erlaubt. " + trustState.reason;
+        logEl.innerText = t("blockedContext") + " " + trustState.reason;
         logEl.style.color = "var(--warning)";
         return false;
     }
@@ -159,11 +525,13 @@
     }
 
     function updateProfileHint() {
-        const profile = getSelectedProfile();
-        profileHint.innerText = profile.hint + (getCloudModeEnabled() ? " Cloud-Mode ist aktiv und nutzt Fortress fest." : "");
-        cloudModeHint.innerText = getCloudModeEnabled()
-            ? "Cloud-Mode aktiv: Fortress + Keyfile Pflicht + SHA-256 Hash fuer Upload-Kontrolle."
-            : "Fuer Cloud-Backup ohne Klartextdaten. Empfohlen mit Keyfile.";
+        const profileHintKey = profileSelect.value === "fortress"
+            ? "profileHintFortress"
+            : profileSelect.value === "hardened"
+                ? "profileHintHardened"
+                : "profileHintBalanced";
+        profileHint.innerText = t(profileHintKey);
+        cloudModeHint.innerText = getCloudModeEnabled() ? t("cloudHintOn") : t("cloudHintOff");
     }
 
     function toggleCloudMode() {
@@ -174,32 +542,49 @@
                 keyfileToggle.checked = true;
                 toggleKeyfileUI();
             }
+            keyfileToggle.disabled = true;
+            requireKeyfileToggle.checked = true;
+            requireKeyfileToggle.disabled = true;
         } else {
             profileSelect.disabled = false;
+            keyfileToggle.disabled = false;
+            requireKeyfileToggle.disabled = false;
         }
         updateProfileHint();
     }
 
     applyRuntimeSecurityGuards();
 
-    passInput.addEventListener('input', updatePasswordStrength);
+    document.getElementById("lang-de").addEventListener("click", () => setLanguage("de"));
+    document.getElementById("lang-en").addEventListener("click", () => setLanguage("en"));
+    passInput.addEventListener('input', () => {
+        updatePasswordStrength();
+        resetInactivityTimer();
+    });
     profileSelect.addEventListener('change', updateProfileHint);
     cloudModeToggle.addEventListener('change', toggleCloudMode);
-    keyfileToggle.addEventListener('change', toggleKeyfileUI);
+    keyfileToggle.addEventListener('change', () => {
+        toggleKeyfileUI();
+        resetInactivityTimer();
+    });
+    autoLockSelect.addEventListener('change', updateAutoLockWatchers);
     passToggle.addEventListener('click', togglePass);
     lockButton.addEventListener('click', () => process('lock'));
     unlockButton.addEventListener('click', () => process('unlock'));
+    setLanguage(localStorage.getItem("neon-lang") || "de");
     updatePasswordStrength();
     toggleCloudMode();
+    updateAutoLockWatchers();
 
     function toggleKeyfileUI() {
         if (keyfileToggle.checked) {
             keyfileDrop.classList.add('active');
         } else {
             keyfileDrop.classList.remove('active');
-            keyfileBytes = null;
+            wipeKeyfileBytes();
+            keyfileDisplayName = "";
             keyfileInput.value = "";
-            document.getElementById('keyfile-name').innerText = "";
+            updateKeyfileStatus();
         }
     }
 
@@ -222,7 +607,9 @@
     async function loadKeyfile(file) {
         if (!file) return;
         keyfileBytes = new Uint8Array(await file.arrayBuffer());
-        document.getElementById('keyfile-name').innerText = "✅ Keyfile geladen: " + file.name;
+        keyfileDisplayName = file.name;
+        updateKeyfileStatus();
+        resetInactivityTimer();
     }
 
     ['dragenter', 'dragover', 'dragleave', 'drop'].forEach((e) => {
@@ -242,13 +629,8 @@
 
     function handleFiles(files) {
         currentFiles = Array.from(files);
-        if (currentFiles.length > 0) {
-            fileInfo.innerText = currentFiles.length + " Datei(en) bereit: " + currentFiles.map((f) => f.name).join(", ");
-            fileInfo.style.color = "var(--neon)";
-        } else {
-            fileInfo.innerText = "Keine Dateien geladen.";
-            fileInfo.style.color = "inherit";
-        }
+        updateFileInfo();
+        resetInactivityTimer();
     }
 
     async function process(action) {
@@ -260,42 +642,48 @@
         if (!assertTrustedContext(log)) return;
 
         if (!pw) {
-            log.innerText = "❌ Fehler: Passwort fehlt!";
+            log.innerText = t("errorNoPassword");
             log.style.color = "var(--warning)";
             return;
         }
         if (currentFiles.length === 0) {
-            log.innerText = "❌ Fehler: Keine Dateien!";
+            log.innerText = t("errorNoFiles");
             log.style.color = "var(--warning)";
             return;
         }
         if (useKeyfile && !keyfileBytes) {
-            log.innerText = "❌ Fehler: Keyfile aktiviert, aber keine Datei gewaehlt!";
+            log.innerText = t("errorKeyfileMissing");
             log.style.color = "var(--warning)";
             return;
         }
         if (action === 'lock' && cloudMode && (!useKeyfile || !keyfileBytes)) {
-            log.innerText = "❌ Cloud-Mode braucht zwingend eine Keyfile.";
+            log.innerText = t("errorCloudNeedsKeyfile");
+            log.style.color = "var(--warning)";
+            return;
+        }
+        if (action === 'lock' && requireKeyfileToggle.checked && !keyfileBytes) {
+            log.innerText = t("errorRequireKeyfile");
             log.style.color = "var(--warning)";
             return;
         }
 
         if (action === 'lock') {
             if (pw.length < 10) {
-                log.innerText = "❌ LOCK blockiert: Nutze mindestens 10 Zeichen Passwort.";
+                log.innerText = t("errorPasswordShort");
                 log.style.color = "var(--warning)";
                 return;
             }
             if (calculatePasswordScore(pw) < 60) {
-                const proceed = window.confirm("Passwort ist eher schwach. Trotzdem fortfahren?");
+                const proceed = window.confirm(t("weakConfirm"));
                 if (!proceed) {
-                    log.innerText = "⚠️ Abgebrochen: Bitte staerkeres Passwort waehlen.";
+                    log.innerText = t("weakAbort");
                     log.style.color = "var(--caution)";
                     return;
                 }
             }
         }
 
+        resetInactivityTimer();
         overlay.style.display = 'flex';
         setTimeout(async () => {
             try {
@@ -306,10 +694,16 @@
                 }
             } catch (e) {
                 console.error(e);
-                log.innerText = "❌ FEHLER / INTEGRITAETS-CHECK GESCHEITERT!\n(Falsches Passwort/Keyfile oder Datei beschaedigt)";
+                log.innerText = t("cryptoError");
                 log.style.color = "var(--warning)";
+                setSecurityReport([]);
             } finally {
                 overlay.style.display = 'none';
+                if (clearSecretToggle.checked) {
+                    passInput.value = "";
+                    updatePasswordStrength();
+                }
+                resetInactivityTimer();
             }
         }, 50);
     }
@@ -334,7 +728,7 @@
 
     function readUint32LE(bytes, offset) {
         if (offset + FILE_HEADER_LENGTH_BYTES > bytes.length) {
-            throw new Error("Defekter Datenblock: Uint32 ausserhalb der Datei.");
+            throw new Error("Defekter Datenblock: Uint32 außerhalb der Datei.");
         }
         return new DataView(bytes.buffer, bytes.byteOffset + offset, FILE_HEADER_LENGTH_BYTES).getUint32(0, true);
     }
@@ -415,7 +809,7 @@
         const isHashAllowed = kdf.hash === "SHA-256" || kdf.hash === "SHA-512";
         const isIterationSafe = Number.isInteger(kdf.iterations) && kdf.iterations >= 100000 && kdf.iterations <= 3000000;
         if (!isHashAllowed || !isIterationSafe) {
-            throw new Error("Ungueltige KDF-Parameter.");
+            throw new Error("Ungültige KDF-Parameter.");
         }
     }
 
@@ -504,11 +898,12 @@
             const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", outBytes));
             const hashLine = toHex(digest) + "  " + outName + "\n";
             downloadBlob(new Blob([hashLine], { type: "text/plain" }), outName + ".sha256.txt");
-            log.innerText = "✅ FERTIG: " + outName + " + SHA256 Hash exportiert (Cloud-Mode).";
+            log.innerText = t("doneCloud") + " " + outName + " " + t("doneCloudSuffix");
         } else {
-            log.innerText = "✅ FERTIG: " + outName + " gespeichert. Profil: " + profile.label + " (" + profile.layers + " Layer).";
+            log.innerText = t("doneLock") + " " + outName + " " + t("doneLockSuffix") + " " + profile.label + " (" + profile.layers + " Layer).";
         }
         log.style.color = "var(--success)";
+        setLockSecurityReport(profile, cloudMode);
     }
 
     function parseV2Envelope(fullData) {
@@ -517,7 +912,7 @@
         offset += FILE_HEADER_LENGTH_BYTES;
 
         if (headerLength < 2 || offset + headerLength > fullData.length) {
-            throw new Error("Defekte NEON2-Datei: Header ungueltig.");
+            throw new Error("Defekte NEON2-Datei: Header ungültig.");
         }
 
         const headerBytes = fullData.slice(offset, offset + headerLength);
@@ -532,24 +927,24 @@
         }
 
         if (!header || header.v !== 2) {
-            throw new Error("Nicht unterstuetzte NEON-Dateiversion.");
+            throw new Error("Nicht unterstützte NEON-Dateiversion.");
         }
         if (!header.kdf || typeof header.kdf !== "object") {
             throw new Error("Defekte NEON2-Datei: KDF-Daten fehlen.");
         }
         if (!Number.isInteger(header.layers) || header.layers < 1 || header.layers > 2) {
-            throw new Error("Defekte NEON2-Datei: Layer-Wert ist ungueltig.");
+            throw new Error("Defekte NEON2-Datei: Layer-Wert ist ungültig.");
         }
         if (header.km === undefined) header.km = 1;
         if (header.km !== 1 && header.km !== 2) {
-            throw new Error("Defekte NEON2-Datei: Key-Material-Version ungueltig.");
+            throw new Error("Defekte NEON2-Datei: Key-Material-Version ungültig.");
         }
         if (header.aad !== undefined && header.aad !== 0 && header.aad !== 1) {
-            throw new Error("Defekte NEON2-Datei: AAD-Flag ungueltig.");
+            throw new Error("Defekte NEON2-Datei: AAD-Flag ungültig.");
         }
         if (header.padPlain === undefined) header.padPlain = 0;
         if (!Number.isInteger(header.padPlain) || header.padPlain < 0 || header.padPlain > (32 * 1024 * 1024)) {
-            throw new Error("Defekte NEON2-Datei: Padding-Wert ungueltig.");
+            throw new Error("Defekte NEON2-Datei: Padding-Wert ungültig.");
         }
 
         validateKdfConfig(header.kdf);
@@ -590,7 +985,7 @@
         }
 
         if (parsed.header.padPlain > payload.length) {
-            throw new Error("Defekte NEON2-Datei: Padding groesser als Inhalt.");
+            throw new Error("Defekte NEON2-Datei: Padding größer als Inhalt.");
         }
         if (parsed.header.padPlain > 0) {
             payload = payload.slice(0, payload.length - parsed.header.padPlain);
@@ -609,7 +1004,7 @@
             offset += FILE_HEADER_LENGTH_BYTES;
 
             if (headerLength < 2 || offset + headerLength > decrypted.length) {
-                throw new Error("Defekter Tresorinhalt: Header ausserhalb des Datenbereichs.");
+                throw new Error("Defekter Tresorinhalt: Header außerhalb des Datenbereichs.");
             }
 
             const headerBytes = decrypted.slice(offset, offset + headerLength);
@@ -619,12 +1014,12 @@
             try {
                 header = JSON.parse(decoder.decode(headerBytes));
             } catch {
-                throw new Error("Defekter Tresorinhalt: Datei-Header ist ungueltig.");
+                throw new Error("Defekter Tresorinhalt: Datei-Header ist ungültig.");
             }
 
             const validSize = Number.isInteger(header.s) && header.s >= 0;
             if (!header || typeof header.n !== "string" || !validSize || offset + header.s > decrypted.length) {
-                throw new Error("Defekter Tresorinhalt: Datei-Metadaten ungueltig.");
+                throw new Error("Defekter Tresorinhalt: Datei-Metadaten ungültig.");
             }
 
             const mimeType = typeof header.t === "string" && header.t ? header.t : "application/octet-stream";
@@ -643,6 +1038,7 @@
 
     function renderPreviewItem(previewGrid, entry) {
         const url = URL.createObjectURL(new Blob([entry.data], { type: entry.type }));
+        previewObjectUrls.push(url);
         const card = document.createElement('div');
         card.className = 'preview-item';
 
@@ -667,7 +1063,7 @@
         const link = document.createElement('a');
         link.href = url;
         link.download = entry.name;
-        link.textContent = "Laden";
+        link.textContent = t("previewDownload");
         link.style.background = "var(--neon)";
         link.style.color = "#000";
         link.style.padding = "2px 8px";
@@ -684,7 +1080,7 @@
     async function unlock(pw) {
         const log = document.getElementById('log');
         const previewGrid = document.getElementById('previews');
-        previewGrid.innerHTML = "";
+        clearPreviewGrid();
 
         const fullData = new Uint8Array(await currentFiles[0].arrayBuffer());
         const useV2 = startsWithMagic(fullData);
@@ -704,11 +1100,12 @@
         }
 
         if (useV2 && v2Header && v2Header.cloud === 1) {
-            log.innerText = "✅ INTEGRITAETS-CHECK: OK. Tresor geoeffnet (NEON2 Cloud-Mode).";
+            log.innerText = t("integrityCloud");
         } else {
             log.innerText = useV2
-                ? "✅ INTEGRITAETS-CHECK: OK. Tresor geoeffnet (NEON2)."
-                : "✅ INTEGRITAETS-CHECK: OK. Tresor geoeffnet (Legacy).";
+                ? t("integrityNeon2")
+                : t("integrityLegacy");
         }
         log.style.color = "var(--success)";
+        setUnlockSecurityReport(useV2, v2Header);
     }

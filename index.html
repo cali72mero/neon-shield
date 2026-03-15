@@ -6,11 +6,14 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'self' blob: data:; media-src 'self' blob:; font-src 'none'; frame-src 'none'; manifest-src 'none'; worker-src 'none'">
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), usb=(), payment=(), accelerometer=(), gyroscope=(), magnetometer=()">
-    <title>NEON-SHIELD V1.7 | Militärischer Datentresor</title>
+    <title>NEON-SHIELD V1.8 | Militärischer Datentresor</title>
     <style>
         :root { --neon: #00f2ff; --bg: #05080a; --panel: #0f172a; --border: #1e2937; --text: #f1f5f9; --warning: #ff4757; --success: #2ecc71; --caution: #f1c40f; }
         body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; line-height: 1.6; }
         .container { max-width: 900px; margin: auto; }
+        .lang-switch { display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 10px; }
+        .lang-btn { width: auto; margin: 0; padding: 8px 12px; border: 1px solid var(--border); background: #020617; color: #cbd5e1; border-radius: 8px; cursor: pointer; font-weight: 700; }
+        .lang-btn.active { background: var(--neon); color: #000; border-color: var(--neon); }
         
         .card { background: var(--panel); border: 1px solid var(--border); padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); position: relative; }
         h1 { color: var(--neon); text-align: center; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; text-shadow: 0 0 10px rgba(0, 242, 255, 0.3); }
@@ -45,6 +48,7 @@
         .strength-meter { height: 4px; background: #222; margin-top: -8px; margin-bottom: 15px; border-radius: 2px; overflow: hidden; }
         .strength-fill { height: 100%; width: 0%; transition: width 0.3s ease, background 0.3s ease; }
         .profile-hint { font-size: 0.8rem; color: #94a3b8; margin-top: -3px; margin-bottom: 10px; }
+        .security-report { white-space: pre-line; font-size: 0.8rem; color: #cbd5e1; background: rgba(0,0,0,0.35); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-top: 10px; min-height: 40px; }
 
         /* Previews */
         .preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; margin-top: 25px; }
@@ -68,44 +72,44 @@
 
 <div class="container">
     <header>
-        <h1>NEON-SHIELD V1.7</h1>
-        <div class="info-text">
+        <div class="lang-switch">
+            <button id="lang-de" class="lang-btn active">DE</button>
+            <button id="lang-en" class="lang-btn">EN</button>
+        </div>
+        <h1>NEON-SHIELD V1.8</h1>
+        <div id="header-subtitle" class="info-text">
             Open Source auf GitHub | Entwickelt von einem Einzelentwickler
         </div>
     </header>
 
-    <div class="card alert caution" id="host-warning" style="display:none;">
-        ⚠️ Unsicherer Host-Kontext erkannt. Erlaubt sind lokal/offline (`file://`), `localhost` oder `https://*.github.io`.
-    </div>
-
     <div class="card">
-        <h2>📖 Anleitung & Sicherheit</h2>
-        <p>Willkommen beim sichersten Weg, deine privaten Bilder und Dateien zu schützen.</p>
+        <h2 id="guide-title">📖 Anleitung & Sicherheit</h2>
+        <p id="guide-intro">Schütze deine privaten Dateien direkt auf deinem Gerät, ohne Cloud-Zwang.</p>
         <ul>
-            <li><strong>Verschlüsselung:</strong> Wir nutzen <strong>AES-256-GCM</strong>. Das ist ein militärischer Standard, der weltweit für geheime Daten genutzt wird.</li>
-            <li><strong>Sperren (LOCK):</strong> Ziehe deine Dateien in das Feld, vergebe ein starkes Passwort und klicke auf LOCK. Du erhältst eine <code>tresor.neon</code> Datei.</li>
-            <li><strong>Entsperren (UNLOCK):</strong> Ziehe deine <code>tresor.neon</code> Datei hinein, gib dein Passwort ein und klicke auf UNLOCK.</li>
-            <li><strong>Zero-Host-Zugriff:</strong> Fuer maximale Sicherheit lokal/offline nutzen; alternativ nur auf deiner eigenen <code>https://*.github.io</code>-Seite hosten.</li>
+            <li id="guide-b1"><strong>Verschlüsselung:</strong> AES-256-GCM mit Integritätsprüfung. Manipulierte Daten werden erkannt.</li>
+            <li id="guide-b2"><strong>LOCK:</strong> Dateien auswählen, starkes Passwort setzen, optional Keyfile hinzufügen, dann Tresor erzeugen.</li>
+            <li id="guide-b3"><strong>UNLOCK:</strong> <code>.neon</code>-Datei laden, Passwort (und ggf. Keyfile) eingeben, Inhalte sicher wiederherstellen.</li>
+            <li id="guide-b4"><strong>Cloud-Mode:</strong> Für Backups mit anonymisiertem Dateinamen, Padding und SHA-256-Prüfdatei.</li>
         </ul>
-        <div class="alert">
-            ⚠️ WICHTIG: Merke dir dein Passwort gut! Wenn du es verlierst, gibt es KEINE Möglichkeit, deine Daten wiederherzustellen. Es gibt keinen "Passwort vergessen" Button.
+        <div id="guide-alert" class="alert">
+            ⚠️ WICHTIG: Ohne korrektes Passwort (und ggf. Keyfile) ist eine Wiederherstellung nicht möglich.
         </div>
-        <p class="info-text" style="text-align: left; margin-bottom: 0;">
-            <strong>Wichtige Info:</strong> Wir haben keinerlei Zugang zu deinen Daten oder Passwörtern. Alles läuft 100% lokal in deinem Browser ab. Nichts wird in eine Cloud hochgeladen oder an Server gesendet.
+        <p id="guide-privacy" class="info-text" style="text-align: left; margin-bottom: 0;">
+            <strong>Datenschutz:</strong> Verschlüsselung und Entschlüsselung laufen im Browser. Du entscheidest selbst, wo du die erzeugten Dateien speicherst.
         </p>
     </div>
 
     <div class="card">
-        <h2>01_DATEIEN AUSWÄHLEN</h2>
+        <h2 id="files-title">01_DATEIEN AUSWÄHLEN</h2>
         <div class="drop-zone" id="drop-area">
-            Dateien hierher ziehen oder klicken
+            <span id="drop-text">Dateien hierher ziehen oder klicken</span>
             <input type="file" id="file-input" multiple style="display:none">
         </div>
         <div id="file-info" style="font-size:0.9rem; margin-top:10px; text-align: center; color: var(--neon);">Keine Dateien geladen.</div>
     </div>
 
     <div class="card">
-        <h2>02_SICHERHEITS-SCHLÜSSEL</h2>
+        <h2 id="security-title">02_SICHERHEITS-SCHLÜSSEL</h2>
         
         <div class="input-wrapper">
             <input type="password" id="pass" placeholder="Dein Master-Passwort...">
@@ -121,33 +125,56 @@
         <div class="keyfile-wrapper">
             <label class="keyfile-label">
                 <input type="checkbox" id="keyfile-toggle">
-                📂 "Schlüssel-Datei" (Keyfile) als 2-Faktor-Schutz nutzen (Optional)
+                <span id="keyfile-label">📂 „Schlüssel-Datei“ (Keyfile) als 2-Faktor-Schutz nutzen (optional)</span>
             </label>
             <div id="keyfile-drop" class="keyfile-drop">
-                [HIER KEYFILE ZIEHEN] <br>
-                <span style="font-size:0.7em; opacity:0.7;">Bild, MP3 oder beliebige Datei als Schlüssel nutzen</span>
+                <span id="keyfile-drop-title">[HIER KEYFILE ZIEHEN]</span> <br>
+                <span id="keyfile-drop-sub" style="font-size:0.7em; opacity:0.7;">Bild, MP3 oder beliebige Datei als Schlüssel nutzen</span>
                 <input type="file" id="keyfile-input" style="display:none">
                 <div id="keyfile-name" class="keyfile-status"></div>
             </div>
         </div>
 
-        <label for="security-profile" style="font-size:0.9rem; color:#cbd5e1; display:block; margin-top:10px;">
+        <label id="profile-label" for="security-profile" style="font-size:0.9rem; color:#cbd5e1; display:block; margin-top:10px;">
             🔐 Sicherheitsprofil (für neue LOCK-Dateien)
         </label>
         <select id="security-profile">
-            <option value="balanced">Balanced | PBKDF2-SHA256 | 600k | 1 Layer</option>
-            <option value="hardened">Hardened | PBKDF2-SHA512 | 1.2M | 1 Layer</option>
-            <option value="fortress">Fortress | PBKDF2-SHA512 | 1.5M | 2 Layer</option>
+            <option id="profile-balanced" value="balanced">Balanced | PBKDF2-SHA256 | 600k | 1 Layer</option>
+            <option id="profile-hardened" value="hardened">Hardened | PBKDF2-SHA512 | 1.2M | 1 Layer</option>
+            <option id="profile-fortress" value="fortress">Fortress | PBKDF2-SHA512 | 1.5M | 2 Layer</option>
         </select>
         <div id="profile-hint" class="profile-hint"></div>
 
         <div class="keyfile-wrapper" style="margin-top: 10px;">
             <label class="keyfile-label">
                 <input type="checkbox" id="cloud-mode-toggle">
-                ☁️ Cloud-Mode (Zero-Knowledge): random Dateiname, Padding, Integritaets-Hash
+                <span id="cloud-label">☁️ Cloud-Mode (Zero-Knowledge): zufälliger Dateiname, Padding, Integritäts-Hash</span>
             </label>
             <div id="cloud-mode-hint" class="profile-hint" style="margin-top: 8px;">
-                Fuer Cloud-Backup ohne Klartextdaten. Empfohlen mit Keyfile.
+                Für Cloud-Backup ohne Klartextdaten. Empfohlen mit Keyfile.
+            </div>
+        </div>
+
+        <div class="keyfile-wrapper" style="margin-top: 10px;">
+            <label class="keyfile-label">
+                <input type="checkbox" id="require-keyfile-toggle">
+                <span id="require-keyfile-label">Keyfile für LOCK erzwingen (empfohlen für sensible Daten)</span>
+            </label>
+            <label class="keyfile-label">
+                <input type="checkbox" id="clear-secret-toggle" checked>
+                <span id="clear-secret-label">Passwort nach jeder Aktion automatisch löschen</span>
+            </label>
+            <label id="auto-lock-label" for="auto-lock-select" style="font-size:0.9rem; color:#cbd5e1; display:block; margin-top:10px;">
+                Auto-Lock bei Inaktivität
+            </label>
+            <select id="auto-lock-select">
+                <option id="auto-lock-off" value="0">Aus</option>
+                <option id="auto-lock-5" value="5">5 Minuten</option>
+                <option id="auto-lock-10" value="10">10 Minuten</option>
+                <option id="auto-lock-30" value="30">30 Minuten</option>
+            </select>
+            <div id="auto-lock-hint" class="profile-hint">
+                Auto-Lock leert Passwort und Vorschau automatisch nach Inaktivität.
             </div>
         </div>
 
@@ -156,15 +183,16 @@
             <button id="unlock-btn" style="background:#334155; color:#fff;">🔓 UNLOCK</button>
         </div>
         <div id="log"></div>
+        <div id="security-report" class="security-report"></div>
     </div>
 
     <div id="previews" class="preview-grid"></div>
 
     <footer class="card" style="text-align: center; font-size: 0.8rem; margin-top: 40px;">
-        <p><strong>Version: 1.7 (Aktuell)</strong></p>
-        <p>Ich bin ein Einzelentwickler und gebe mein Bestes, diese Webseite ständig zu verbessern. Wenn du Fehler findest oder Vorschläge hast, melde dich gerne:</p>
+        <p><strong id="version-text">Version: 1.8 (Aktuell)</strong></p>
+        <p id="footer-text">Ich bin ein Einzelentwickler und gebe mein Bestes, diese Webseite ständig zu verbessern. Wenn du Fehler findest oder Vorschläge hast, melde dich gerne:</p>
         <a href="mailto:support@cali72mero.de" style="color: var(--neon); text-decoration: none;">support@cali72mero.de</a>
-        <p style="margin-top: 15px; opacity: 0.6;">&copy; 2025 Neon-Shield Project. 100% Privacy Focused.</p>
+        <p id="copyright-text" style="margin-top: 15px; opacity: 0.6;">&copy; 2025 Neon-Shield Project. 100% Privacy Focused.</p>
     </footer>
 </div>
 

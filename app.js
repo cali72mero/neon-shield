@@ -179,6 +179,7 @@
             errorNoPassword: "❌ Fehler: Passwort fehlt!",
             errorNoFiles: "❌ Fehler: Keine Dateien!",
             errorKeyfileMissing: "❌ Fehler: Keyfile aktiviert, aber keine Datei gewählt!",
+            errorFolderUnsupported: "❌ Dieser Browser unterstützt keine Ordner-Auswahl. Nutze Drag&Drop oder einen Chromium-Browser.",
             errorCloudNeedsKeyfile: "❌ Cloud-Mode braucht zwingend eine Keyfile.",
             errorRequireKeyfile: "❌ LOCK blockiert: Diese Einstellung verlangt eine Keyfile.",
             errorRecoveryNeedsKeyfile: "❌ Recovery kann nur mit aktivem Keyfile erstellt werden.",
@@ -312,6 +313,7 @@
             errorNoPassword: "❌ Error: Password missing!",
             errorNoFiles: "❌ Error: No files selected!",
             errorKeyfileMissing: "❌ Error: Keyfile enabled, but no file selected!",
+            errorFolderUnsupported: "❌ This browser does not support folder selection. Use drag & drop or a Chromium browser.",
             errorCloudNeedsKeyfile: "❌ Cloud mode requires a keyfile.",
             errorRequireKeyfile: "❌ LOCK blocked: This setting requires a keyfile.",
             errorRecoveryNeedsKeyfile: "❌ Recovery can only be created with an active keyfile.",
@@ -521,6 +523,41 @@
         }
 
         return normalizeFilesWithVaultPath(dataTransfer.files || []);
+    }
+
+    function supportsDirectoryInput() {
+        const probe = document.createElement("input");
+        probe.type = "file";
+        return "webkitdirectory" in probe || "directory" in probe || "mozdirectory" in probe;
+    }
+
+    async function openFolderPicker() {
+        resetInactivityTimer();
+
+        if (typeof window.showDirectoryPicker === "function") {
+            try {
+                const handle = await window.showDirectoryPicker({ mode: "read" });
+                const files = await collectFilesFromHandle(handle, handle.name || "");
+                if (files.length > 0) {
+                    handleFiles(files);
+                }
+                return;
+            } catch (error) {
+                if (error && error.name === "AbortError") return;
+                console.error(error);
+            }
+        }
+
+        if (supportsDirectoryInput()) {
+            folderInput.click();
+            return;
+        }
+
+        const log = document.getElementById('log');
+        if (log) {
+            log.innerText = t("errorFolderUnsupported");
+            log.style.color = "var(--warning)";
+        }
     }
 
     function toBase64(bytes) {
@@ -1095,7 +1132,14 @@
         log.style.color = "var(--success)";
     });
     pickFilesButton.addEventListener('click', () => fileInput.click());
-    pickFolderButton.addEventListener('click', () => folderInput.click());
+    pickFolderButton.addEventListener('click', () => {
+        openFolderPicker().catch((error) => {
+            console.error(error);
+            const log = document.getElementById('log');
+            log.innerText = t("unexpectedError");
+            log.style.color = "var(--warning)";
+        });
+    });
     setLanguage(localStorage.getItem("neon-lang") || "de");
     updatePasswordStrength();
     updateDownloadKeyfileButton();

@@ -531,6 +531,31 @@
         return "webkitdirectory" in probe || "directory" in probe || "mozdirectory" in probe;
     }
 
+    function showFolderUnsupportedMessage() {
+        const log = document.getElementById('log');
+        if (log) {
+            log.innerText = t("errorFolderUnsupported");
+            log.style.color = "var(--warning)";
+        }
+    }
+
+    function createDirectoryInputElement() {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.multiple = true;
+        input.style.position = "fixed";
+        input.style.left = "-9999px";
+        input.style.top = "-9999px";
+        input.setAttribute("webkitdirectory", "");
+        input.setAttribute("directory", "");
+        input.setAttribute("mozdirectory", "");
+        try { input.webkitdirectory = true; } catch {}
+        try { input.directory = true; } catch {}
+        try { input.mozdirectory = true; } catch {}
+        document.body.appendChild(input);
+        return input;
+    }
+
     async function openFolderPicker() {
         resetInactivityTimer();
 
@@ -549,15 +574,40 @@
         }
 
         if (supportsDirectoryInput()) {
-            folderInput.click();
+            const tempInput = createDirectoryInputElement();
+            const cleanup = () => tempInput.remove();
+
+            tempInput.addEventListener("change", (event) => {
+                const files = event.target.files;
+                if (!files || files.length === 0) {
+                    cleanup();
+                    return;
+                }
+                const normalized = normalizeFilesWithVaultPath(files);
+                const hasRelativePath = normalized.some((file) => (file.vaultPath || "").includes("/"));
+                handleFiles(normalized);
+                if (!hasRelativePath) {
+                    showFolderUnsupportedMessage();
+                }
+                cleanup();
+            }, { once: true });
+
+            try {
+                if (typeof tempInput.showPicker === "function") {
+                    await tempInput.showPicker();
+                } else {
+                    tempInput.click();
+                }
+            } catch (error) {
+                cleanup();
+                if (error && error.name === "AbortError") return;
+                console.error(error);
+                showFolderUnsupportedMessage();
+            }
             return;
         }
 
-        const log = document.getElementById('log');
-        if (log) {
-            log.innerText = t("errorFolderUnsupported");
-            log.style.color = "var(--warning)";
-        }
+        showFolderUnsupportedMessage();
     }
 
     function toBase64(bytes) {

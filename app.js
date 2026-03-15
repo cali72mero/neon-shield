@@ -5,6 +5,8 @@
     let generatedKeyfileName = "";
     let recoveredKeyDigestOverride = null;
     let inactivityTimer = null;
+    let unlockedEntries = [];
+    let lastUnlockMeta = null;
     const previewObjectUrls = [];
 
     const LEGACY_KDF = { iterations: 600000, hash: "SHA-256" };
@@ -12,7 +14,15 @@
     const FILE_HEADER_LENGTH_BYTES = 4;
     const MAX_LOCK_BATCH_BYTES = 32 * 1024 * 1024;
     const MAX_LOCK_BATCH_FILES = 80;
+    const MAX_ZIP_CHUNK_BYTES = 96 * 1024 * 1024;
+    const PART_FILENAME_RE = /\.part(\d+)-of-(\d+)\.neon$/i;
     const ACTIVITY_EVENTS = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
+    const cryptoWorkerState = {
+        worker: null,
+        ready: false,
+        pending: new Map(),
+        seq: 0
+    };
 
     const SECURITY_PROFILES = {
         balanced: {
@@ -75,7 +85,10 @@
     const requireKeyfileToggle = document.getElementById('require-keyfile-toggle');
     const clearSecretToggle = document.getElementById('clear-secret-toggle');
     const autoLockSelect = document.getElementById('auto-lock-select');
+    const ecoModeToggle = document.getElementById('eco-mode-toggle');
     const securityReportEl = document.getElementById('security-report');
+    const progressFill = document.getElementById('progress-fill');
+    const progressText = document.getElementById('progress-text');
     const keyfileToggle = document.getElementById('keyfile-toggle');
     const genKeyfileButton = document.getElementById('gen-keyfile-btn');
     const downloadKeyfileButton = document.getElementById('download-keyfile-btn');
@@ -86,6 +99,10 @@
     const recoveryPanel = document.getElementById('recovery-panel');
     const recoveryPassInput = document.getElementById('recovery-pass');
     const recoveryCountSelect = document.getElementById('recovery-count');
+    const previewActions = document.getElementById('preview-actions');
+    const previewSummary = document.getElementById('preview-summary');
+    const downloadAllZipButton = document.getElementById('download-all-zip-btn');
+    const saveFolderButton = document.getElementById('save-folder-btn');
 
     const keyfileDrop = document.getElementById('keyfile-drop');
     const keyfileInput = document.getElementById('keyfile-input');
@@ -166,6 +183,8 @@
             autoLock10: "10 Minuten",
             autoLock30: "30 Minuten",
             autoLockHint: "Auto-Lock leert Passwort und Vorschau automatisch nach Inaktivität.",
+            ecoModeLabel: "🧠 Eco-Mode: adaptive RAM-sparende Verarbeitung",
+            ecoModeHint: "Reduziert Batch-Größe automatisch auf schwächeren Geräten.",
             lockBtn: "🔒 LOCK (.neon)",
             unlockBtn: "🔓 UNLOCK",
             versionText: "Version: 1.8 (Aktuell)",
@@ -208,6 +227,33 @@
             doneLockMultiSuffix: "Teile gespeichert. Profil:",
             lockBatchRunning: "⏳ LOCK läuft: Teil",
             lockBatchOf: "von",
+            lockManifestReady: "Manifest gespeichert:",
+            progressIdle: "Bereit.",
+            progressLock: "LOCK-Fortschritt",
+            progressUnlock: "UNLOCK-Fortschritt",
+            progressExportZip: "ZIP-Export",
+            progressExportFolder: "Ordner-Export",
+            previewActionsTitle: "03_EXPORT",
+            downloadAllZipBtn: "⬇ Alle als ZIP herunterladen",
+            saveFolderBtn: "📁 Ordnerstruktur speichern",
+            exportHint: "Große Exporte werden automatisch in mehrere ZIP-Dateien aufgeteilt.",
+            unlockNoVaultFiles: "❌ Für UNLOCK wurde keine .neon-Datei ausgewählt.",
+            unlockNeedsParts: "❌ Ungültige Part-Auswahl. Bitte zusammengehörige .partXXX-of-YYY.neon Dateien wählen.",
+            unlockMissingParts: "⚠️ Fehlende Teile erkannt:",
+            unlockMissingPartsAsk: "Fehlende Teile erkannt. Nur vorhandene Teile entschlüsseln?",
+            unlockPartialChosen: "⚠️ Fortsetzung im Teilmodus. Fehlende Teile werden übersprungen.",
+            unlockPartFailed: "Teil konnte nicht entschlüsselt werden",
+            unlockHashMismatch: "Integritätsfehler (SHA-256) im Teil",
+            unlockDoneMulti: "✅ Mehrteiliger UNLOCK abgeschlossen.",
+            unlockSummaryLine: "Entschlüsselte Teile",
+            summaryFiles: "Dateien",
+            summarySize: "Gesamtgröße",
+            summaryFailedParts: "Fehlerteile",
+            summaryMissingParts: "Fehlende Teile",
+            zipDone: "✅ ZIP-Export fertig.",
+            folderDone: "✅ Ordner-Export fertig.",
+            folderApiMissing: "❌ Dieser Browser unterstützt keinen Ordner-Export. Nutze ZIP-Export.",
+            exportNoEntries: "❌ Kein entschlüsselter Inhalt zum Exportieren.",
             integrityCloud: "✅ INTEGRITÄTS-CHECK: OK. Tresor geöffnet (NEON2 Cloud-Mode).",
             integrityNeon2: "✅ INTEGRITÄTS-CHECK: OK. Tresor geöffnet (NEON2).",
             integrityLegacy: "✅ INTEGRITÄTS-CHECK: OK. Tresor geöffnet (Legacy).",
@@ -304,6 +350,8 @@
             autoLock10: "10 minutes",
             autoLock30: "30 minutes",
             autoLockHint: "Auto-lock clears password and preview after inactivity.",
+            ecoModeLabel: "🧠 Eco mode: adaptive RAM-saving processing",
+            ecoModeHint: "Automatically reduces batch sizes on weaker devices.",
             lockBtn: "🔒 LOCK (.neon)",
             unlockBtn: "🔓 UNLOCK",
             versionText: "Version: 1.8 (Current)",
@@ -346,6 +394,33 @@
             doneLockMultiSuffix: "parts saved. Profile:",
             lockBatchRunning: "⏳ LOCK running: part",
             lockBatchOf: "of",
+            lockManifestReady: "Manifest saved:",
+            progressIdle: "Ready.",
+            progressLock: "LOCK progress",
+            progressUnlock: "UNLOCK progress",
+            progressExportZip: "ZIP export",
+            progressExportFolder: "Folder export",
+            previewActionsTitle: "03_EXPORT",
+            downloadAllZipBtn: "⬇ Download all as ZIP",
+            saveFolderBtn: "📁 Save folder structure",
+            exportHint: "Large exports are automatically split into multiple ZIP files.",
+            unlockNoVaultFiles: "❌ No .neon file selected for UNLOCK.",
+            unlockNeedsParts: "❌ Invalid part selection. Please select matching .partXXX-of-YYY.neon files.",
+            unlockMissingParts: "⚠️ Missing parts detected:",
+            unlockMissingPartsAsk: "Missing parts detected. Decrypt only available parts?",
+            unlockPartialChosen: "⚠️ Continuing in partial mode. Missing parts are skipped.",
+            unlockPartFailed: "Part could not be decrypted",
+            unlockHashMismatch: "Integrity error (SHA-256) in part",
+            unlockDoneMulti: "✅ Multi-part UNLOCK finished.",
+            unlockSummaryLine: "Decrypted parts",
+            summaryFiles: "Files",
+            summarySize: "Total size",
+            summaryFailedParts: "Failed parts",
+            summaryMissingParts: "Missing parts",
+            zipDone: "✅ ZIP export complete.",
+            folderDone: "✅ Folder export complete.",
+            folderApiMissing: "❌ This browser does not support folder export. Use ZIP export.",
+            exportNoEntries: "❌ No decrypted content available for export.",
             integrityCloud: "✅ INTEGRITY CHECK: OK. Vault opened (NEON2 Cloud mode).",
             integrityNeon2: "✅ INTEGRITY CHECK: OK. Vault opened (NEON2).",
             integrityLegacy: "✅ INTEGRITY CHECK: OK. Vault opened (Legacy).",
@@ -393,7 +468,15 @@
                 .slice(0, 6)
                 .map((f) => f.vaultPath || f.name);
             const suffix = currentFiles.length > 6 ? ", …" : "";
-            fileInfo.innerText = currentFiles.length + " " + t("filesReadySuffix") + ": " + previewNames.join(", ") + suffix;
+            const totalBytes = currentFiles.reduce((sum, file) => sum + getFileSizeSafe(file), 0);
+            const cfg = getAdaptiveBatchConfig(currentFiles);
+            const estimatedParts = estimateBatchCount(currentFiles, cfg);
+            const partLabel = currentLang === "en" ? "parts" : "Teile";
+            fileInfo.innerText =
+                currentFiles.length + " " + t("filesReadySuffix") +
+                " | " + formatBytes(totalBytes) +
+                " | ~" + estimatedParts + " " + partLabel +
+                ": " + previewNames.join(", ") + suffix;
             fileInfo.style.color = "var(--neon)";
             return;
         }
@@ -817,6 +900,66 @@
         if (!previewGrid) return;
         wipePreviewUrls();
         previewGrid.innerHTML = "";
+        unlockedEntries = [];
+        lastUnlockMeta = null;
+        if (previewActions) previewActions.style.display = "none";
+        if (previewSummary) previewSummary.textContent = "";
+    }
+
+    function formatBytes(value) {
+        const num = Number(value);
+        if (!Number.isFinite(num) || num <= 0) return "0 B";
+        const units = ["B", "KB", "MB", "GB", "TB"];
+        let size = num;
+        let idx = 0;
+        while (size >= 1024 && idx < units.length - 1) {
+            size /= 1024;
+            idx++;
+        }
+        const digits = size >= 100 ? 0 : size >= 10 ? 1 : 2;
+        return size.toFixed(digits) + " " + units[idx];
+    }
+
+    function setProgress(active, percent, text) {
+        if (progressFill) {
+            const value = Math.max(0, Math.min(100, Number(percent) || 0));
+            progressFill.style.width = value + "%";
+        }
+        if (progressText) {
+            progressText.dataset.active = active ? "1" : "";
+            progressText.textContent = text || t("progressIdle");
+        }
+    }
+
+    function resetProgress() {
+        setProgress(false, 0, t("progressIdle"));
+    }
+
+    function showPreviewActions(entries, meta) {
+        unlockedEntries = Array.isArray(entries) ? entries : [];
+        lastUnlockMeta = meta || null;
+        if (!previewActions || !previewSummary) return;
+        if (unlockedEntries.length === 0) {
+            previewActions.style.display = "none";
+            previewSummary.textContent = "";
+            return;
+        }
+        const totalBytes = unlockedEntries.reduce((sum, entry) => sum + (entry?.data?.length || 0), 0);
+        const summaryLines = [
+            t("summaryFiles") + ": " + unlockedEntries.length,
+            t("summarySize") + ": " + formatBytes(totalBytes)
+        ];
+        if (meta && Number.isInteger(meta.successParts) && Number.isInteger(meta.totalParts)) {
+            summaryLines.push(t("unlockSummaryLine") + ": " + meta.successParts + "/" + meta.totalParts);
+        }
+        if (meta && Array.isArray(meta.failedParts) && meta.failedParts.length > 0) {
+            summaryLines.push(t("summaryFailedParts") + ": " + meta.failedParts.join(", "));
+        }
+        if (meta && Array.isArray(meta.missingParts) && meta.missingParts.length > 0) {
+            summaryLines.push(t("summaryMissingParts") + ": " + meta.missingParts.join(", "));
+        }
+        previewSummary.textContent = summaryLines.join("\n");
+        previewActions.style.display = "block";
     }
 
     function wipeKeyfileBytes() {
@@ -830,6 +973,7 @@
         passInput.value = "";
         updatePasswordStrength();
         clearPreviewGrid();
+        resetProgress();
         if (reasonKey) {
             const log = document.getElementById('log');
             if (log) {
@@ -984,8 +1128,14 @@
         document.getElementById("auto-lock-10").textContent = t("autoLock10");
         document.getElementById("auto-lock-30").textContent = t("autoLock30");
         document.getElementById("auto-lock-hint").textContent = t("autoLockHint");
+        document.getElementById("eco-mode-label").textContent = t("ecoModeLabel");
+        document.getElementById("eco-mode-hint").textContent = t("ecoModeHint");
         lockButton.textContent = t("lockBtn");
         unlockButton.textContent = t("unlockBtn");
+        document.getElementById("preview-actions-title").textContent = t("previewActionsTitle");
+        downloadAllZipButton.textContent = t("downloadAllZipBtn");
+        saveFolderButton.textContent = t("saveFolderBtn");
+        document.getElementById("export-hint").textContent = t("exportHint");
         document.getElementById("version-text").textContent = t("versionText");
         document.getElementById("footer-text").textContent = t("footerText");
         document.getElementById("copyright-text").textContent = t("copyrightText");
@@ -1010,7 +1160,13 @@
         document.querySelectorAll("#previews a").forEach((link) => {
             link.textContent = t("previewDownload");
         });
+        if (progressText && !progressText.dataset.active) {
+            progressText.textContent = t("progressIdle");
+        }
         setSecurityReport([]);
+        if (Array.isArray(unlockedEntries) && unlockedEntries.length > 0) {
+            showPreviewActions(unlockedEntries, lastUnlockMeta);
+        }
         const ctx = evaluateTrustedContext();
         trustState.ok = ctx.ok;
         trustState.reason = ctx.reason;
@@ -1147,6 +1303,7 @@
     }
 
     applyRuntimeSecurityGuards();
+    initCryptoWorker();
 
     document.getElementById("lang-de").addEventListener("click", () => setLanguage("de"));
     document.getElementById("lang-en").addEventListener("click", () => setLanguage("en"));
@@ -1170,6 +1327,10 @@
     });
     cloudPadSelect.addEventListener('change', resetInactivityTimer);
     cloudChaffToggle.addEventListener('change', resetInactivityTimer);
+    ecoModeToggle.addEventListener('change', () => {
+        updateFileInfo();
+        resetInactivityTimer();
+    });
     recoveryPassInput.addEventListener('input', resetInactivityTimer);
     for (let i = 1; i <= 5; i++) {
         getRecoveryQuestionInput(i).addEventListener('input', resetInactivityTimer);
@@ -1179,6 +1340,22 @@
     passToggle.addEventListener('click', togglePass);
     lockButton.addEventListener('click', () => process('lock'));
     unlockButton.addEventListener('click', () => process('unlock'));
+    downloadAllZipButton.addEventListener('click', () => {
+        exportUnlockedAsZip().catch((error) => {
+            console.error(error);
+            const log = document.getElementById('log');
+            log.innerText = t("unexpectedError");
+            log.style.color = "var(--warning)";
+        });
+    });
+    saveFolderButton.addEventListener('click', () => {
+        exportUnlockedToFolder().catch((error) => {
+            console.error(error);
+            const log = document.getElementById('log');
+            log.innerText = t("unexpectedError");
+            log.style.color = "var(--warning)";
+        });
+    });
     genKeyfileButton.addEventListener('click', () => {
         generateLocalKeyfile().catch((error) => {
             console.error(error);
@@ -1214,6 +1391,7 @@
     toggleRecoveryPanel();
     toggleCloudMode();
     updateAutoLockWatchers();
+    resetProgress();
 
     window.addEventListener("error", () => {
         const log = document.getElementById('log');
@@ -1306,6 +1484,12 @@
         resetInactivityTimer();
     }
 
+    function pickFirstVaultFile(files) {
+        const list = Array.isArray(files) ? files : [];
+        const neon = list.find((file) => typeof file?.name === "string" && file.name.toLowerCase().endsWith(".neon"));
+        return neon || null;
+    }
+
     async function process(action) {
         const pw = passInput.value;
         const log = document.getElementById('log');
@@ -1328,14 +1512,15 @@
         if (action === 'lock') {
             setRecoveryQuestionReadOnly(false, 0);
         }
-        if (action === 'unlock' && currentFiles.length !== 1) {
-            log.innerText = t("errorUnlockSingle");
-            log.style.color = "var(--warning)";
-            return;
-        }
         if (action === 'unlock') {
+            const firstVault = pickFirstVaultFile(currentFiles);
+            if (!firstVault) {
+                log.innerText = t("unlockNoVaultFiles");
+                log.style.color = "var(--warning)";
+                return;
+            }
             try {
-                const recoveryMeta = await getRecoveryMetaFromFile(currentFiles[0]);
+                const recoveryMeta = await getRecoveryMetaFromFile(firstVault);
                 if (recoveryMeta) {
                     applyRecoveryMetaToUi(recoveryMeta);
                     log.innerText = t("recoveryPromptReady");
@@ -1422,6 +1607,9 @@
                     passInput.value = "";
                     updatePasswordStrength();
                 }
+                if (progressText && progressText.dataset.active) {
+                    resetProgress();
+                }
                 resetInactivityTimer();
             }
         }, 50);
@@ -1473,6 +1661,166 @@
         return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
     }
 
+    function initCryptoWorker() {
+        if (typeof Worker !== "function") return;
+        try {
+            const worker = new Worker("./crypto-worker.js");
+            worker.onmessage = (event) => {
+                const data = event.data || {};
+                const entry = cryptoWorkerState.pending.get(data.id);
+                if (!entry) return;
+                cryptoWorkerState.pending.delete(data.id);
+                if (data.ok) {
+                    entry.resolve(data.payload);
+                } else {
+                    entry.reject(new Error(data.error || "Worker request failed."));
+                }
+            };
+            worker.onerror = () => {
+                cryptoWorkerState.ready = false;
+                for (const [, entry] of cryptoWorkerState.pending) {
+                    entry.reject(new Error("Crypto worker failed."));
+                }
+                cryptoWorkerState.pending.clear();
+            };
+            cryptoWorkerState.worker = worker;
+            cryptoWorkerState.ready = true;
+        } catch (error) {
+            console.warn("Crypto worker unavailable, using main thread.", error);
+            cryptoWorkerState.ready = false;
+            cryptoWorkerState.worker = null;
+        }
+    }
+
+    function runCryptoWorkerTask(type, payload, transferList) {
+        if (!cryptoWorkerState.ready || !cryptoWorkerState.worker) {
+            throw new Error("worker-not-ready");
+        }
+        return new Promise((resolve, reject) => {
+            const id = ++cryptoWorkerState.seq;
+            cryptoWorkerState.pending.set(id, { resolve, reject });
+            try {
+                cryptoWorkerState.worker.postMessage(
+                    { id: id, type: type, payload: payload },
+                    Array.isArray(transferList) ? transferList : []
+                );
+            } catch (error) {
+                cryptoWorkerState.pending.delete(id);
+                reject(error);
+            }
+        });
+    }
+
+    async function digestBytes(algorithm, bytes) {
+        const input = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || 0);
+        if (cryptoWorkerState.ready && input.length <= (8 * 1024 * 1024)) {
+            try {
+                const outBuffer = await runCryptoWorkerTask(
+                    "digest",
+                    { algorithm: algorithm, data: input.buffer },
+                    []
+                );
+                return new Uint8Array(outBuffer);
+            } catch {
+                cryptoWorkerState.ready = false;
+            }
+        }
+        return new Uint8Array(await crypto.subtle.digest(algorithm, input));
+    }
+
+    async function encryptPayloadLayers(payload, pw, keyBytesForLock, profile, envelopeHeader) {
+        const input = payload instanceof Uint8Array ? payload : new Uint8Array(payload || 0);
+        if (cryptoWorkerState.ready) {
+            try {
+                const outBuffer = await runCryptoWorkerTask(
+                    "encryptLayers",
+                    {
+                        payload: input.buffer,
+                        password: pw,
+                        keyBytes: keyBytesForLock ? keyBytesForLock.buffer : null,
+                        recoveredDigest: null,
+                        profile: {
+                            iterations: profile.iterations,
+                            hash: profile.hash,
+                            layers: profile.layers,
+                            keyMaterialVersion: profile.keyMaterialVersion || 2
+                        },
+                        headerBytes: envelopeHeader.buffer
+                    },
+                    []
+                );
+                return new Uint8Array(outBuffer);
+            } catch {
+                cryptoWorkerState.ready = false;
+            }
+        }
+
+        let out = input;
+        for (let layer = 1; layer <= profile.layers; layer++) {
+            const salt = randomBytes(16);
+            const iv = randomBytes(12);
+            const key = await deriveAesKey(
+                pw,
+                keyBytesForLock,
+                salt,
+                profile,
+                "layer-" + layer,
+                "encrypt",
+                profile.keyMaterialVersion || 2
+            );
+            const aad = buildLayerAad(envelopeHeader, layer);
+            const encrypted = new Uint8Array(await crypto.subtle.encrypt(
+                { name: "AES-GCM", iv: iv, additionalData: aad },
+                key,
+                out
+            ));
+            out = concatUint8(salt, iv, encrypted);
+        }
+        return out;
+    }
+
+    async function decryptPayloadLayers(parsed, password, keyBytes) {
+        const input = parsed.payload;
+        const recoveryDigest = recoveredKeyDigestOverride instanceof Uint8Array ? recoveredKeyDigestOverride : null;
+        if (cryptoWorkerState.ready) {
+            try {
+                const outBuffer = await runCryptoWorkerTask(
+                    "decryptLayers",
+                    {
+                        payload: input.buffer,
+                        password: password,
+                        keyBytes: keyBytes ? keyBytes.buffer : null,
+                        recoveredDigest: recoveryDigest ? recoveryDigest.buffer : null,
+                        header: parsed.header,
+                        headerBytes: parsed.headerBytes.buffer
+                    },
+                    []
+                );
+                return new Uint8Array(outBuffer);
+            } catch {
+                cryptoWorkerState.ready = false;
+            }
+        }
+
+        const kdf = parsed.header.kdf;
+        const useAad = parsed.header.aad === 1;
+        let payload = input;
+        for (let layer = parsed.header.layers; layer >= 1; layer--) {
+            if (payload.length < 29) {
+                throw new Error("Defekte NEON2-Datei: Layer " + layer + " zu kurz.");
+            }
+            const salt = payload.slice(0, 16);
+            const iv = payload.slice(16, 28);
+            const encrypted = payload.slice(28);
+            const key = await deriveAesKey(password, keyBytes, salt, kdf, "layer-" + layer, "decrypt", parsed.header.km);
+            const params = useAad
+                ? { name: "AES-GCM", iv: iv, additionalData: buildLayerAad(parsed.headerBytes, layer) }
+                : { name: "AES-GCM", iv: iv };
+            payload = new Uint8Array(await crypto.subtle.decrypt(params, key, encrypted));
+        }
+        return payload;
+    }
+
     function generateVaultFilename(cloudModeEnabled) {
         if (!cloudModeEnabled) return "tresor.neon";
         const ts = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
@@ -1485,16 +1833,51 @@
         return Number.isFinite(size) && size >= 0 ? size : 0;
     }
 
-    function splitFilesIntoLockBatches(files) {
+    function getAdaptiveBatchConfig(files) {
         const source = Array.isArray(files) ? files : [];
+        const totalBytes = source.reduce((sum, file) => sum + getFileSizeSafe(file), 0);
+        let maxBytes = MAX_LOCK_BATCH_BYTES;
+        let maxFiles = MAX_LOCK_BATCH_FILES;
+        const ecoEnabled = Boolean(ecoModeToggle && ecoModeToggle.checked);
+        const deviceMemory = Number(navigator?.deviceMemory || 0);
+
+        if (ecoEnabled) {
+            if (Number.isFinite(deviceMemory) && deviceMemory > 0 && deviceMemory <= 4) {
+                maxBytes = 16 * 1024 * 1024;
+                maxFiles = 40;
+            } else if (Number.isFinite(deviceMemory) && deviceMemory > 0 && deviceMemory <= 8) {
+                maxBytes = 24 * 1024 * 1024;
+                maxFiles = 60;
+            }
+            if (source.length >= 300) {
+                maxFiles = Math.min(maxFiles, 50);
+            }
+            if (totalBytes >= (1024 * 1024 * 1024)) {
+                maxBytes = Math.min(maxBytes, 24 * 1024 * 1024);
+            }
+        }
+
+        return { maxBytes: maxBytes, maxFiles: maxFiles };
+    }
+
+    function estimateBatchCount(files, config) {
+        const batches = splitFilesIntoLockBatches(files, config);
+        return Math.max(1, batches.length);
+    }
+
+    function splitFilesIntoLockBatches(files, config) {
+        const source = Array.isArray(files) ? files : [];
+        const cfg = config || getAdaptiveBatchConfig(source);
+        const maxBytes = Math.max(1, Number(cfg.maxBytes) || MAX_LOCK_BATCH_BYTES);
+        const maxFiles = Math.max(1, Number(cfg.maxFiles) || MAX_LOCK_BATCH_FILES);
         const batches = [];
         let batch = [];
         let batchBytes = 0;
 
         for (const file of source) {
             const fileBytes = getFileSizeSafe(file);
-            const exceedsBytes = batch.length > 0 && (batchBytes + fileBytes) > MAX_LOCK_BATCH_BYTES;
-            const exceedsFiles = batch.length >= MAX_LOCK_BATCH_FILES;
+            const exceedsBytes = batch.length > 0 && (batchBytes + fileBytes) > maxBytes;
+            const exceedsFiles = batch.length >= maxFiles;
             if (exceedsBytes || exceedsFiles) {
                 batches.push(batch);
                 batch = [];
@@ -1518,6 +1901,13 @@
             return baseName.slice(0, -5) + ".part" + part + "-of-" + total + ".neon";
         }
         return baseName + ".part" + part + "-of-" + total + ".neon";
+    }
+
+    function buildManifestFilename(baseName) {
+        if (baseName.toLowerCase().endsWith(".neon")) {
+            return baseName.slice(0, -5) + ".manifest.json";
+        }
+        return baseName + ".manifest.json";
     }
 
     async function buildVaultPayloadForBatch(files, encoder, cloudModeEnabled, addDecoys) {
@@ -1711,25 +2101,30 @@
         const keyBytesForLock = keyfileToggle.checked ? keyfileBytes : null;
         const selectedProfileKey = cloudMode ? "fortress" : getSelectedProfileKey();
         const profile = SECURITY_PROFILES[selectedProfileKey];
-
-        const lockBatches = splitFilesIntoLockBatches(currentFiles);
+        const batchConfig = getAdaptiveBatchConfig(currentFiles);
+        const lockBatches = splitFilesIntoLockBatches(currentFiles, batchConfig);
         const totalParts = lockBatches.length;
         const baseOutName = generateVaultFilename(cloudMode);
         const addDecoys = cloudMode && cloudChaffToggle.checked;
+        const manifestParts = [];
+        const manifestName = buildManifestFilename(baseOutName);
 
         let recoveryMeta = null;
         if (Array.isArray(recoveryPairs) && recoveryPairs.length > 0 && keyBytesForLock) {
             const recoveryPassword = normalizeSecretText(recoveryPassInput.value);
-            const keyDigest = new Uint8Array(await crypto.subtle.digest("SHA-512", keyBytesForLock));
+            const keyDigest = await digestBytes("SHA-512", keyBytesForLock);
             recoveryMeta = await buildRecoveryPackage(recoveryPassword, recoveryPairs, keyDigest);
         }
 
         for (let partIndex = 0; partIndex < totalParts; partIndex++) {
             const partNumber = partIndex + 1;
+            const percentStart = ((partNumber - 1) / totalParts) * 100;
+            const percentDone = (partNumber / totalParts) * 100;
             if (totalParts > 1) {
                 log.innerText = t("lockBatchRunning") + " " + partNumber + " " + t("lockBatchOf") + " " + totalParts + "…";
                 log.style.color = "var(--caution)";
             }
+            setProgress(true, percentStart, t("progressLock") + ": " + partNumber + "/" + totalParts);
 
             let payloadInfo = await buildVaultPayloadForBatch(lockBatches[partIndex], encoder, cloudMode, addDecoys);
             let payload = payloadInfo.payload;
@@ -1754,40 +2149,48 @@
             if (recoveryMeta) envelopeMeta.recovery = recoveryMeta;
             const envelopeHeader = encoder.encode(JSON.stringify(envelopeMeta));
 
-            for (let layer = 1; layer <= profile.layers; layer++) {
-                const salt = randomBytes(16);
-                const iv = randomBytes(12);
-                const key = await deriveAesKey(
-                    pw,
-                    keyBytesForLock,
-                    salt,
-                    profile,
-                    "layer-" + layer,
-                    "encrypt",
-                    profile.keyMaterialVersion || 2
-                );
-                const aad = buildLayerAad(envelopeHeader, layer);
-                const encrypted = new Uint8Array(await crypto.subtle.encrypt(
-                    { name: "AES-GCM", iv: iv, additionalData: aad },
-                    key,
-                    payload
-                ));
-                payload = concatUint8(salt, iv, encrypted);
-            }
+            payload = await encryptPayloadLayers(payload, pw, keyBytesForLock, profile, envelopeHeader);
 
             const outBytes = concatUint8(MAGIC_V2, writeUint32LE(envelopeHeader.length), envelopeHeader, payload);
             const outName = buildVaultPartFilename(baseOutName, partNumber, totalParts);
             downloadBlob(new Blob([outBytes], { type: "application/octet-stream" }), outName);
+            const digest = await digestBytes("SHA-256", outBytes);
+            const digestHex = toHex(digest);
 
             if (cloudMode) {
-                const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", outBytes));
-                const hashLine = toHex(digest) + "  " + outName + "\n";
+                const hashLine = digestHex + "  " + outName + "\n";
                 downloadBlob(new Blob([hashLine], { type: "text/plain" }), outName + ".sha256.txt");
             }
 
+            manifestParts.push({
+                index: partNumber,
+                name: outName,
+                sha256: digestHex,
+                files: lockBatches[partIndex].length,
+                plainBytes: lockBatches[partIndex].reduce((sum, f) => sum + getFileSizeSafe(f), 0)
+            });
+
             payloadInfo = null;
             payload = new Uint8Array(0);
+            setProgress(true, percentDone, t("progressLock") + ": " + partNumber + "/" + totalParts);
             await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+
+        if (totalParts > 1) {
+            const manifest = {
+                kind: "NEON2_MULTI_MANIFEST",
+                version: 1,
+                createdAt: new Date().toISOString(),
+                baseName: baseOutName,
+                partsTotal: totalParts,
+                cloud: cloudMode ? 1 : 0,
+                profile: selectedProfileKey,
+                filesTotal: currentFiles.length,
+                batch: { maxBytes: batchConfig.maxBytes, maxFiles: batchConfig.maxFiles },
+                parts: manifestParts
+            };
+            const json = JSON.stringify(manifest, null, 2) + "\n";
+            downloadBlob(new Blob([json], { type: "application/json" }), manifestName);
         }
 
         if (cloudMode) {
@@ -1801,7 +2204,11 @@
         } else {
             log.innerText = t("doneLock") + " " + baseOutName + " " + t("doneLockSuffix") + " " + profile.label + " (" + profile.layers + " Layer).";
         }
+        if (totalParts > 1) {
+            log.innerText += " " + t("lockManifestReady") + " " + manifestName;
+        }
         log.style.color = "var(--success)";
+        setProgress(false, 100, t("progressIdle"));
         setLockSecurityReport(profile, cloudMode);
     }
 
@@ -1854,6 +2261,13 @@
                 throw new Error("Defekte NEON2-Datei: Recovery-Daten ungültig.");
             }
         }
+        if (header.part !== undefined) {
+            const part = header.part;
+            const validPart = Number.isInteger(part?.i) && Number.isInteger(part?.t) && part.i >= 1 && part.t >= 1 && part.i <= part.t;
+            if (!validPart) {
+                throw new Error("Defekte NEON2-Datei: Part-Daten ungültig.");
+            }
+        }
 
         validateKdfConfig(header.kdf);
         return { header: header, headerBytes: headerBytes, payload: fullData.slice(offset) };
@@ -1873,29 +2287,13 @@
 
     async function decryptV2(fullData, password, keyBytes) {
         const parsed = parseV2Envelope(fullData);
-        const kdf = parsed.header.kdf;
-        const useAad = parsed.header.aad === 1;
 
         if (!keyBytes && parsed.header.recovery) {
             recoveredKeyDigestOverride = await tryRecoverKeyDigest(parsed.header.recovery);
         }
 
         try {
-            let payload = parsed.payload;
-            for (let layer = parsed.header.layers; layer >= 1; layer--) {
-                if (payload.length < 29) {
-                    throw new Error("Defekte NEON2-Datei: Layer " + layer + " zu kurz.");
-                }
-                const salt = payload.slice(0, 16);
-                const iv = payload.slice(16, 28);
-                const encrypted = payload.slice(28);
-
-                const key = await deriveAesKey(password, keyBytes, salt, kdf, "layer-" + layer, "decrypt", parsed.header.km);
-                const params = useAad
-                    ? { name: "AES-GCM", iv: iv, additionalData: buildLayerAad(parsed.headerBytes, layer) }
-                    : { name: "AES-GCM", iv: iv };
-                payload = new Uint8Array(await crypto.subtle.decrypt(params, key, encrypted));
-            }
+            let payload = await decryptPayloadLayers(parsed, password, keyBytes);
 
             if (parsed.header.padPlain > payload.length) {
                 throw new Error("Defekte NEON2-Datei: Padding größer als Inhalt.");
@@ -1960,6 +2358,15 @@
         return normalized.replace(/[\\/]/g, "__");
     }
 
+    function toZipPath(vaultPath, fallbackName) {
+        const normalized = normalizeVaultPath(vaultPath, fallbackName || "file.bin").replace(/\\/g, "/");
+        const cleaned = normalized
+            .split("/")
+            .filter((segment) => segment && segment !== "." && segment !== "..")
+            .join("/");
+        return cleaned || (fallbackName || "file.bin");
+    }
+
     function renderPreviewItem(previewGrid, entry) {
         const url = URL.createObjectURL(new Blob([entry.data], { type: entry.type }));
         previewObjectUrls.push(url);
@@ -2001,36 +2408,423 @@
         previewGrid.appendChild(card);
     }
 
+    function parsePartDescriptor(filename) {
+        const name = typeof filename === "string" ? filename : "";
+        const match = name.match(PART_FILENAME_RE);
+        if (!match) return null;
+        const index = Number(match[1]);
+        const total = Number(match[2]);
+        if (!Number.isInteger(index) || !Number.isInteger(total) || index < 1 || total < 1 || index > total) {
+            return null;
+        }
+        return { index: index, total: total };
+    }
+
+    function formatPartLabel(index, total) {
+        return "part" + String(index).padStart(3, "0") + "-of-" + String(total).padStart(3, "0");
+    }
+
+    async function parseManifestFromSelection(files) {
+        const candidates = Array.from(files || []).filter((file) => typeof file?.name === "string" && file.name.toLowerCase().endsWith(".json"));
+        for (const file of candidates) {
+            try {
+                const text = await file.text();
+                const parsed = JSON.parse(text);
+                if (parsed?.kind !== "NEON2_MULTI_MANIFEST") continue;
+                if (!Number.isInteger(parsed?.partsTotal) || parsed.partsTotal < 1) continue;
+                const parts = Array.isArray(parsed.parts)
+                    ? parsed.parts
+                        .map((part) => ({
+                            index: Number(part?.index),
+                            name: typeof part?.name === "string" ? part.name : "",
+                            sha256: typeof part?.sha256 === "string" ? part.sha256.toLowerCase() : ""
+                        }))
+                        .filter((part) => Number.isInteger(part.index) && part.index >= 1 && part.index <= parsed.partsTotal && part.name.length > 0)
+                        .sort((a, b) => a.index - b.index)
+                    : [];
+                if (parts.length === 0) continue;
+                return {
+                    file: file,
+                    partsTotal: parsed.partsTotal,
+                    parts: parts
+                };
+            } catch {}
+        }
+        return null;
+    }
+
+    async function buildUnlockPlan(files) {
+        const allFiles = Array.from(files || []);
+        const vaultFiles = allFiles.filter((file) => typeof file?.name === "string" && file.name.toLowerCase().endsWith(".neon"));
+        if (vaultFiles.length === 0) {
+            throw new Error(t("unlockNoVaultFiles"));
+        }
+
+        const manifest = await parseManifestFromSelection(allFiles);
+        if (manifest) {
+            const selectedByName = new Map(vaultFiles.map((file) => [file.name, file]));
+            const selectedParts = [];
+            const missingParts = [];
+            for (const part of manifest.parts) {
+                const file = selectedByName.get(part.name);
+                if (!file) {
+                    missingParts.push(part.name);
+                    continue;
+                }
+                selectedParts.push({
+                    file: file,
+                    name: part.name,
+                    index: part.index,
+                    total: manifest.partsTotal,
+                    sha256: part.sha256 || ""
+                });
+            }
+            if (selectedParts.length === 0) {
+                throw new Error(t("unlockNeedsParts"));
+            }
+            return {
+                mode: manifest.partsTotal > 1 || selectedParts.length > 1 ? "multi" : "single",
+                parts: selectedParts.sort((a, b) => a.index - b.index),
+                expectedTotal: manifest.partsTotal,
+                missingParts: missingParts
+            };
+        }
+
+        const partDescriptors = vaultFiles.map((file) => ({ file: file, part: parsePartDescriptor(file.name) }));
+        const allPartNamed = partDescriptors.every((row) => Boolean(row.part));
+        if (allPartNamed && vaultFiles.length > 0) {
+            const totals = new Set(partDescriptors.map((row) => row.part.total));
+            if (totals.size !== 1) {
+                throw new Error(t("unlockNeedsParts"));
+            }
+            const expectedTotal = partDescriptors[0].part.total;
+            const byIndex = new Map();
+            for (const row of partDescriptors) {
+                if (!byIndex.has(row.part.index)) {
+                    byIndex.set(row.part.index, row.file);
+                }
+            }
+            const selectedParts = Array.from(byIndex.entries())
+                .sort((a, b) => a[0] - b[0])
+                .map(([index, file]) => ({
+                    file: file,
+                    name: file.name,
+                    index: index,
+                    total: expectedTotal,
+                    sha256: ""
+                }));
+            const missingParts = [];
+            for (let i = 1; i <= expectedTotal; i++) {
+                if (!byIndex.has(i)) {
+                    missingParts.push(formatPartLabel(i, expectedTotal));
+                }
+            }
+            return {
+                mode: expectedTotal > 1 || selectedParts.length > 1 ? "multi" : "single",
+                parts: selectedParts,
+                expectedTotal: expectedTotal,
+                missingParts: missingParts
+            };
+        }
+
+        if (vaultFiles.length === 1) {
+            return {
+                mode: "single",
+                parts: [{ file: vaultFiles[0], name: vaultFiles[0].name, index: 1, total: 1, sha256: "" }],
+                expectedTotal: 1,
+                missingParts: []
+            };
+        }
+
+        return {
+            mode: "multi",
+            parts: vaultFiles.map((file, index) => ({ file: file, name: file.name, index: index + 1, total: vaultFiles.length, sha256: "" })),
+            expectedTotal: vaultFiles.length,
+            missingParts: []
+        };
+    }
+
+    const CRC32_TABLE = (() => {
+        const table = new Uint32Array(256);
+        for (let i = 0; i < 256; i++) {
+            let c = i;
+            for (let j = 0; j < 8; j++) {
+                c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+            }
+            table[i] = c >>> 0;
+        }
+        return table;
+    })();
+
+    function crc32(bytes) {
+        let crc = 0xFFFFFFFF;
+        for (let i = 0; i < bytes.length; i++) {
+            crc = CRC32_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+        }
+        return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+
+    function splitEntriesForZip(entries, maxChunkBytes) {
+        const source = Array.isArray(entries) ? entries : [];
+        const chunks = [];
+        let chunk = [];
+        let chunkBytes = 0;
+        for (let i = 0; i < source.length; i++) {
+            const entry = source[i];
+            const nameBytes = new TextEncoder().encode(toZipPath(entry.name, "file-" + i + ".bin"));
+            const estimate = (entry?.data?.length || 0) + nameBytes.length + 160;
+            if (chunk.length > 0 && (chunkBytes + estimate) > maxChunkBytes) {
+                chunks.push(chunk);
+                chunk = [];
+                chunkBytes = 0;
+            }
+            chunk.push(entry);
+            chunkBytes += estimate;
+        }
+        if (chunk.length > 0) chunks.push(chunk);
+        return chunks;
+    }
+
+    function buildStoredZipBlob(entries) {
+        const encoder = new TextEncoder();
+        const files = entries.map((entry, index) => {
+            const name = toZipPath(entry.name, "file-" + index + ".bin");
+            const nameBytes = encoder.encode(name);
+            const data = entry.data instanceof Uint8Array ? entry.data : new Uint8Array(entry.data || 0);
+            return {
+                nameBytes: nameBytes,
+                data: data,
+                crc: crc32(data)
+            };
+        });
+
+        const localTotal = files.reduce((sum, file) => sum + 30 + file.nameBytes.length + file.data.length, 0);
+        const centralTotal = files.reduce((sum, file) => sum + 46 + file.nameBytes.length, 0);
+        const totalLength = localTotal + centralTotal + 22;
+        const out = new Uint8Array(totalLength);
+        const view = new DataView(out.buffer);
+        let offset = 0;
+        const localOffsets = [];
+
+        for (const file of files) {
+            localOffsets.push(offset);
+            view.setUint32(offset, 0x04034b50, true); offset += 4;
+            view.setUint16(offset, 20, true); offset += 2;
+            view.setUint16(offset, 0x0800, true); offset += 2;
+            view.setUint16(offset, 0, true); offset += 2;
+            view.setUint16(offset, 0, true); offset += 2;
+            view.setUint16(offset, 0, true); offset += 2;
+            view.setUint32(offset, file.crc >>> 0, true); offset += 4;
+            view.setUint32(offset, file.data.length >>> 0, true); offset += 4;
+            view.setUint32(offset, file.data.length >>> 0, true); offset += 4;
+            view.setUint16(offset, file.nameBytes.length, true); offset += 2;
+            view.setUint16(offset, 0, true); offset += 2;
+            out.set(file.nameBytes, offset); offset += file.nameBytes.length;
+            out.set(file.data, offset); offset += file.data.length;
+        }
+
+        const centralOffset = offset;
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            view.setUint32(offset, 0x02014b50, true); offset += 4;
+            view.setUint16(offset, 20, true); offset += 2;
+            view.setUint16(offset, 20, true); offset += 2;
+            view.setUint16(offset, 0x0800, true); offset += 2;
+            view.setUint16(offset, 0, true); offset += 2;
+            view.setUint16(offset, 0, true); offset += 2;
+            view.setUint16(offset, 0, true); offset += 2;
+            view.setUint32(offset, file.crc >>> 0, true); offset += 4;
+            view.setUint32(offset, file.data.length >>> 0, true); offset += 4;
+            view.setUint32(offset, file.data.length >>> 0, true); offset += 4;
+            view.setUint16(offset, file.nameBytes.length, true); offset += 2;
+            view.setUint16(offset, 0, true); offset += 2;
+            view.setUint16(offset, 0, true); offset += 2;
+            view.setUint16(offset, 0, true); offset += 2;
+            view.setUint16(offset, 0, true); offset += 2;
+            view.setUint32(offset, 0, true); offset += 4;
+            view.setUint32(offset, localOffsets[i], true); offset += 4;
+            out.set(file.nameBytes, offset); offset += file.nameBytes.length;
+        }
+
+        const centralSize = offset - centralOffset;
+        view.setUint32(offset, 0x06054b50, true); offset += 4;
+        view.setUint16(offset, 0, true); offset += 2;
+        view.setUint16(offset, 0, true); offset += 2;
+        view.setUint16(offset, files.length, true); offset += 2;
+        view.setUint16(offset, files.length, true); offset += 2;
+        view.setUint32(offset, centralSize >>> 0, true); offset += 4;
+        view.setUint32(offset, centralOffset >>> 0, true); offset += 4;
+        view.setUint16(offset, 0, true); offset += 2;
+
+        return new Blob([out], { type: "application/zip" });
+    }
+
+    async function exportUnlockedAsZip() {
+        const log = document.getElementById('log');
+        if (!Array.isArray(unlockedEntries) || unlockedEntries.length === 0) {
+            log.innerText = t("exportNoEntries");
+            log.style.color = "var(--warning)";
+            return;
+        }
+        const maxChunk = ecoModeToggle.checked ? Math.min(MAX_ZIP_CHUNK_BYTES, 64 * 1024 * 1024) : MAX_ZIP_CHUNK_BYTES;
+        const chunks = splitEntriesForZip(unlockedEntries, maxChunk);
+        const total = chunks.length;
+        for (let i = 0; i < total; i++) {
+            const part = i + 1;
+            setProgress(true, (part - 1) / total * 100, t("progressExportZip") + ": " + part + "/" + total);
+            const blob = buildStoredZipBlob(chunks[i]);
+            const filename = total === 1
+                ? "unlock-all.zip"
+                : "unlock-all.part" + String(part).padStart(3, "0") + "-of-" + String(total).padStart(3, "0") + ".zip";
+            downloadBlob(blob, filename);
+            setProgress(true, part / total * 100, t("progressExportZip") + ": " + part + "/" + total);
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+        log.innerText = t("zipDone");
+        log.style.color = "var(--success)";
+        resetProgress();
+    }
+
+    async function getOrCreateNestedDirectory(rootHandle, pathParts) {
+        let dir = rootHandle;
+        for (const part of pathParts) {
+            dir = await dir.getDirectoryHandle(part, { create: true });
+        }
+        return dir;
+    }
+
+    async function exportUnlockedToFolder() {
+        const log = document.getElementById('log');
+        if (!Array.isArray(unlockedEntries) || unlockedEntries.length === 0) {
+            log.innerText = t("exportNoEntries");
+            log.style.color = "var(--warning)";
+            return;
+        }
+        if (typeof window.showDirectoryPicker !== "function") {
+            log.innerText = t("folderApiMissing");
+            log.style.color = "var(--warning)";
+            return;
+        }
+
+        const root = await window.showDirectoryPicker();
+        const total = unlockedEntries.length;
+        for (let i = 0; i < total; i++) {
+            const entry = unlockedEntries[i];
+            const normalized = toZipPath(entry.name, "file-" + (i + 1) + ".bin");
+            const parts = normalized.split("/").filter(Boolean);
+            const filename = parts.pop() || ("file-" + (i + 1) + ".bin");
+            const dir = await getOrCreateNestedDirectory(root, parts);
+            const handle = await dir.getFileHandle(filename, { create: true });
+            const writable = await handle.createWritable();
+            await writable.write(entry.data);
+            await writable.close();
+            setProgress(true, ((i + 1) / total) * 100, t("progressExportFolder") + ": " + (i + 1) + "/" + total);
+            if ((i + 1) % 10 === 0) {
+                await new Promise((resolve) => setTimeout(resolve, 0));
+            }
+        }
+        log.innerText = t("folderDone");
+        log.style.color = "var(--success)";
+        resetProgress();
+    }
+
     async function unlock(pw) {
         const log = document.getElementById('log');
         const previewGrid = document.getElementById('previews');
         clearPreviewGrid();
         const keyBytesForUnlock = keyfileToggle.checked ? keyfileBytes : null;
+        const plan = await buildUnlockPlan(currentFiles);
 
-        const fullData = new Uint8Array(await currentFiles[0].arrayBuffer());
-        const useV2 = startsWithMagic(fullData);
-        let decrypted;
-        let v2Header = null;
-        if (useV2) {
-            const parsed = await decryptV2(fullData, pw, keyBytesForUnlock);
-            decrypted = parsed.plaintext;
-            v2Header = parsed.header;
-        } else {
-            decrypted = await decryptLegacy(fullData, pw, keyBytesForUnlock);
+        if (plan.missingParts.length > 0) {
+            const missingText = plan.missingParts.join(", ");
+            log.innerText = t("unlockMissingParts") + " " + missingText;
+            log.style.color = "var(--caution)";
+            const proceed = window.confirm(t("unlockMissingPartsAsk") + "\n" + missingText);
+            if (!proceed) {
+                resetProgress();
+                return;
+            }
+            log.innerText = t("unlockPartialChosen");
+            log.style.color = "var(--caution)";
         }
-        const entries = parseVaultEntries(decrypted);
 
-        for (const entry of entries) {
+        const allEntries = [];
+        const failedParts = [];
+        let firstV2Header = null;
+        let firstUseV2 = false;
+        let successParts = 0;
+        const totalParts = Math.max(1, plan.expectedTotal || plan.parts.length);
+
+        for (let i = 0; i < plan.parts.length; i++) {
+            const row = plan.parts[i];
+            const progressStart = (i / plan.parts.length) * 100;
+            const progressDone = ((i + 1) / plan.parts.length) * 100;
+            setProgress(true, progressStart, t("progressUnlock") + ": " + (i + 1) + "/" + plan.parts.length);
+            try {
+                const fullData = new Uint8Array(await row.file.arrayBuffer());
+                if (row.sha256) {
+                    const digest = await digestBytes("SHA-256", fullData);
+                    if (toHex(digest).toLowerCase() !== row.sha256.toLowerCase()) {
+                        throw new Error(t("unlockHashMismatch") + ": " + row.name);
+                    }
+                }
+
+                const useV2 = startsWithMagic(fullData);
+                let decrypted;
+                let header = null;
+                if (useV2) {
+                    const parsed = await decryptV2(fullData, pw, keyBytesForUnlock);
+                    decrypted = parsed.plaintext;
+                    header = parsed.header;
+                } else {
+                    decrypted = await decryptLegacy(fullData, pw, keyBytesForUnlock);
+                }
+                const entries = parseVaultEntries(decrypted);
+                allEntries.push(...entries);
+                successParts += 1;
+                if (useV2 && !firstUseV2) {
+                    firstUseV2 = true;
+                    firstV2Header = header;
+                }
+            } catch (error) {
+                console.error(error);
+                failedParts.push(row.name);
+            }
+            setProgress(true, progressDone, t("progressUnlock") + ": " + (i + 1) + "/" + plan.parts.length);
+            await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+
+        if (allEntries.length === 0) {
+            resetProgress();
+            throw new Error(t("cryptoError"));
+        }
+
+        for (const entry of allEntries) {
             renderPreviewItem(previewGrid, entry);
         }
 
-        if (useV2 && v2Header && v2Header.cloud === 1) {
-            log.innerText = t("integrityCloud");
+        const partial = failedParts.length > 0 || plan.missingParts.length > 0 || successParts < totalParts;
+        if (plan.mode === "single" && !partial) {
+            if (firstUseV2 && firstV2Header && firstV2Header.cloud === 1) {
+                log.innerText = t("integrityCloud");
+            } else {
+                log.innerText = firstUseV2 ? t("integrityNeon2") : t("integrityLegacy");
+            }
+            log.style.color = "var(--success)";
         } else {
-            log.innerText = useV2
-                ? t("integrityNeon2")
-                : t("integrityLegacy");
+            const partsInfo = t("unlockSummaryLine") + ": " + successParts + "/" + totalParts;
+            const failInfo = failedParts.length > 0 ? (" | " + t("unlockPartFailed") + ": " + failedParts.join(", ")) : "";
+            const missingInfo = plan.missingParts.length > 0 ? (" | " + t("unlockMissingParts") + " " + plan.missingParts.join(", ")) : "";
+            log.innerText = t("unlockDoneMulti") + " " + partsInfo + failInfo + missingInfo;
+            log.style.color = partial ? "var(--caution)" : "var(--success)";
         }
-        log.style.color = "var(--success)";
-        setUnlockSecurityReport(useV2, v2Header, Boolean(keyBytesForUnlock));
+
+        showPreviewActions(allEntries, {
+            successParts: successParts,
+            totalParts: totalParts,
+            failedParts: failedParts,
+            missingParts: plan.missingParts
+        });
+        setUnlockSecurityReport(firstUseV2, firstV2Header, Boolean(keyBytesForUnlock));
+        resetProgress();
     }

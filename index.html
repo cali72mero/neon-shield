@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'self' blob: data:; media-src 'self' blob:; font-src 'none'; frame-src 'none'; manifest-src 'none'; worker-src 'none'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'self' blob: data:; media-src 'self' blob:; font-src 'none'; frame-src 'none'; manifest-src 'none'; worker-src 'self'">
     <meta name="referrer" content="no-referrer">
     <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), geolocation=(), usb=(), payment=(), accelerometer=(), gyroscope=(), magnetometer=()">
     <title>NEON-SHIELD V1.8 | Militärischer Datentresor</title>
@@ -54,6 +54,11 @@
         .strength-fill { height: 100%; width: 0%; transition: width 0.3s ease, background 0.3s ease; }
         .profile-hint { font-size: 0.8rem; color: #94a3b8; margin-top: -3px; margin-bottom: 10px; }
         .security-report { white-space: pre-line; font-size: 0.8rem; color: #cbd5e1; background: rgba(0,0,0,0.35); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-top: 10px; min-height: 40px; }
+        .progress-wrap { margin-top: 10px; height: 10px; background: rgba(0,0,0,0.35); border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
+        .progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #22d3ee, #16a34a); transition: width 0.2s ease; }
+        .progress-text { margin-top: 6px; font-size: 0.78rem; color: #93c5fd; text-align: center; min-height: 18px; }
+        .preview-actions { margin-top: 16px; }
+        .preview-summary { white-space: pre-line; font-size: 0.84rem; color: #cbd5e1; background: rgba(0,0,0,0.35); border: 1px solid var(--border); border-radius: 8px; padding: 10px; min-height: 40px; margin-bottom: 8px; }
 
         /* Previews */
         .preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; margin-top: 25px; }
@@ -216,6 +221,13 @@
             <div id="auto-lock-hint" class="profile-hint">
                 Auto-Lock leert Passwort und Vorschau automatisch nach Inaktivität.
             </div>
+            <label class="keyfile-label" style="margin-top: 10px;">
+                <input type="checkbox" id="eco-mode-toggle" checked>
+                <span id="eco-mode-label">🧠 Eco-Mode: adaptive RAM-sparende Verarbeitung</span>
+            </label>
+            <div id="eco-mode-hint" class="profile-hint">
+                Reduziert Batch-Größe automatisch auf schwächeren Geräten.
+            </div>
         </div>
 
         <div class="keyfile-wrapper" style="margin-top: 10px;">
@@ -272,10 +284,23 @@
             <button id="unlock-btn" style="background:#334155; color:#fff;">🔓 UNLOCK</button>
         </div>
         <div id="log"></div>
+        <div class="progress-wrap"><div id="progress-fill" class="progress-fill"></div></div>
+        <div id="progress-text" class="progress-text">Bereit.</div>
         <div id="security-report" class="security-report"></div>
     </div>
 
     <div id="previews" class="preview-grid"></div>
+    <div id="preview-actions" class="card preview-actions" style="display:none;">
+        <h2 id="preview-actions-title">03_EXPORT</h2>
+        <div id="preview-summary" class="preview-summary"></div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+            <button id="download-all-zip-btn" type="button">⬇ Alle als ZIP herunterladen</button>
+            <button id="save-folder-btn" type="button" style="background:#334155; color:#fff;">📁 Ordnerstruktur speichern</button>
+        </div>
+        <div id="export-hint" class="profile-hint" style="margin-top: 8px;">
+            Große Exporte werden automatisch in mehrere ZIP-Dateien aufgeteilt.
+        </div>
+    </div>
 
     <footer class="card" style="text-align: center; font-size: 0.8rem; margin-top: 40px;">
         <p><strong id="version-text">Version: 1.8 (Aktuell)</strong></p>

@@ -17,6 +17,7 @@
 3. Starkes Passwort setzen (optional Keyfile aktivieren).
 4. `LOCK` zum Verschlüsseln oder `UNLOCK` zum Entschlüsseln nutzen.
 5. Bei sehr vielen Dateien erzeugt `LOCK` automatisch mehrere `.neon`-Teile (RAM-schonend/stabil).
+6. Für mehrteilige Tresore optional zusätzlich die `*.manifest.json` Datei mit auswählen/sichern.
 
 ## Kurz-Anleitung: Welches Profil wann?
 
@@ -42,10 +43,16 @@ Empfohlene Praxis:
 - Zusätzliche Cloud-Härtung: wählbare Padding-Blockgröße + optionaler Tarnmodus (Decoy-Dateien).
 - Ganze Ordner verschlüsseln (Drag & Drop oder `Ordner wählen`).
 - RAM-schonendes LOCK-Batching: große Mengen werden automatisch in mehrere Vault-Teile aufgeteilt.
+- Mehrteilige Vaults mit Manifest (`*.manifest.json`) inkl. SHA-256 pro Teil.
+- UNLOCK für mehrere Parts in einem Schritt (inkl. Vollständigkeits-Check und Fehlteil-Warnung).
 - Keyfile für `LOCK` erzwingen.
 - Optionaler Recovery-Modus ohne Keyfile: 2. Passwort + 1–5 Sicherheitsfragen.
 - Passwort nach Aktion automatisch löschen.
 - Auto-Lock bei Inaktivität.
+- Eco-Mode für adaptive RAM-Nutzung auf schwächeren Geräten.
+- Fortschrittsanzeige für LOCK/UNLOCK/Export.
+- Web-Worker-gestützte Krypto-Verarbeitung für flüssigere UI unter Last.
+- Export nach UNLOCK: alle Dateien als ZIP (automatisch in mehrere ZIP-Teile) oder mit Ordnerstruktur speichern.
 - DE/EN direkt in der Oberfläche umschalten.
 
 ## Was die App nicht kann

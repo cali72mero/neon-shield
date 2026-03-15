@@ -42,6 +42,11 @@
         .keyfile-drop { display: none; border: 1px dashed var(--neon); padding: 15px; text-align: center; border-radius: 8px; margin-top: 10px; font-size: 0.8rem; background: rgba(0, 242, 255, 0.05); cursor: pointer; }
         .keyfile-drop.active { display: block; animation: fadeIn 0.3s ease; }
         .keyfile-status { color: var(--neon); font-weight: bold; margin-top: 5px; }
+        .recovery-panel { display: none; margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: rgba(2, 6, 23, 0.45); }
+        .recovery-panel.active { display: block; }
+        .recovery-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+        .recovery-row.hidden { display: none; }
+        .recovery-note { font-size: 0.78rem; color: #94a3b8; margin-top: 8px; }
 
         /* Password Features */
         .eye-icon { position: absolute; right: 15px; top: 24px; cursor: pointer; color: var(--neon); font-size: 1.2rem; user-select: none; z-index: 10; }
@@ -151,6 +156,8 @@
                 <input type="file" id="keyfile-input" style="display:none">
                 <div id="keyfile-name" class="keyfile-status"></div>
             </div>
+            <button id="gen-keyfile-btn" type="button" style="margin-top:10px; background:#334155; color:#fff;">🔑 Keyfile lokal generieren</button>
+            <div id="gen-keyfile-hint" class="profile-hint" style="margin-top:6px;">Erstellt eine zufällige Keyfile-Datei lokal auf deinem Gerät.</div>
         </div>
 
         <label id="profile-label" for="security-profile" style="font-size:0.9rem; color:#cbd5e1; display:block; margin-top:10px;">
@@ -173,6 +180,18 @@
             <div id="cloud-mode-hint" class="profile-hint" style="margin-top: 8px;">
                 Für Cloud-Backup ohne Klartextdaten. Empfohlen mit Keyfile.
             </div>
+            <label id="cloud-pad-label" for="cloud-pad-select" style="font-size:0.9rem; color:#cbd5e1; display:block; margin-top:10px;">
+                Cloud-Padding Blockgröße
+            </label>
+            <select id="cloud-pad-select">
+                <option id="cloud-pad-1" value="1">1 MB</option>
+                <option id="cloud-pad-4" value="4">4 MB</option>
+                <option id="cloud-pad-8" value="8">8 MB</option>
+            </select>
+            <label class="keyfile-label">
+                <input type="checkbox" id="cloud-chaff-toggle">
+                <span id="cloud-chaff-label">Cloud-Tarnmodus: zufällige Lockvogel-Dateien hinzufügen</span>
+            </label>
         </div>
 
         <div class="keyfile-wrapper" style="margin-top: 10px;">
@@ -195,6 +214,55 @@
             </select>
             <div id="auto-lock-hint" class="profile-hint">
                 Auto-Lock leert Passwort und Vorschau automatisch nach Inaktivität.
+            </div>
+        </div>
+
+        <div class="keyfile-wrapper" style="margin-top: 10px;">
+            <label class="keyfile-label">
+                <input type="checkbox" id="recovery-toggle">
+                <span id="recovery-toggle-label">🔁 Recovery ohne Keyfile erlauben (2. Passwort + Sicherheitsfragen)</span>
+            </label>
+            <div id="recovery-panel" class="recovery-panel">
+                <label id="recovery-pass-label" for="recovery-pass" style="font-size:0.9rem; color:#cbd5e1; display:block;">
+                    Recovery-Passwort (anders als Master-Passwort)
+                </label>
+                <input type="password" id="recovery-pass" placeholder="Recovery-Passwort...">
+
+                <label id="recovery-count-label" for="recovery-count" style="font-size:0.9rem; color:#cbd5e1; display:block; margin-top:4px;">
+                    Anzahl Sicherheitsfragen (1-5)
+                </label>
+                <select id="recovery-count">
+                    <option value="1">1 Frage</option>
+                    <option value="2">2 Fragen</option>
+                    <option value="3" selected>3 Fragen</option>
+                    <option value="4">4 Fragen</option>
+                    <option value="5">5 Fragen</option>
+                </select>
+
+                <div id="recovery-row-1" class="recovery-row">
+                    <input id="recovery-q1" type="text" placeholder="Frage 1">
+                    <input id="recovery-a1" type="password" placeholder="Antwort 1">
+                </div>
+                <div id="recovery-row-2" class="recovery-row">
+                    <input id="recovery-q2" type="text" placeholder="Frage 2">
+                    <input id="recovery-a2" type="password" placeholder="Antwort 2">
+                </div>
+                <div id="recovery-row-3" class="recovery-row">
+                    <input id="recovery-q3" type="text" placeholder="Frage 3">
+                    <input id="recovery-a3" type="password" placeholder="Antwort 3">
+                </div>
+                <div id="recovery-row-4" class="recovery-row hidden">
+                    <input id="recovery-q4" type="text" placeholder="Frage 4">
+                    <input id="recovery-a4" type="password" placeholder="Antwort 4">
+                </div>
+                <div id="recovery-row-5" class="recovery-row hidden">
+                    <input id="recovery-q5" type="text" placeholder="Frage 5">
+                    <input id="recovery-a5" type="password" placeholder="Antwort 5">
+                </div>
+
+                <div id="recovery-note" class="recovery-note">
+                    Nur wenn alle Antworten exakt stimmen, ist UNLOCK ohne Keyfile möglich.
+                </div>
             </div>
         </div>
 

@@ -1,13 +1,13 @@
     let currentFiles = [];
     let keyfileBytes = null;
     let keyfileDisplayName = "";
+    let recoveredKeyDigestOverride = null;
     let inactivityTimer = null;
     const previewObjectUrls = [];
 
     const LEGACY_KDF = { iterations: 600000, hash: "SHA-256" };
     const MAGIC_V2 = new TextEncoder().encode("NEON2");
     const FILE_HEADER_LENGTH_BYTES = 4;
-    const CLOUD_PAD_UNIT = 1024 * 1024;
     const ACTIVITY_EVENTS = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
 
     const SECURITY_PROFILES = {
@@ -66,14 +66,21 @@
     const profileHint = document.getElementById('profile-hint');
     const cloudModeToggle = document.getElementById('cloud-mode-toggle');
     const cloudModeHint = document.getElementById('cloud-mode-hint');
+    const cloudPadSelect = document.getElementById('cloud-pad-select');
+    const cloudChaffToggle = document.getElementById('cloud-chaff-toggle');
     const requireKeyfileToggle = document.getElementById('require-keyfile-toggle');
     const clearSecretToggle = document.getElementById('clear-secret-toggle');
     const autoLockSelect = document.getElementById('auto-lock-select');
     const securityReportEl = document.getElementById('security-report');
     const keyfileToggle = document.getElementById('keyfile-toggle');
+    const genKeyfileButton = document.getElementById('gen-keyfile-btn');
     const passToggle = document.getElementById('toggle-pass');
     const lockButton = document.getElementById('lock-btn');
     const unlockButton = document.getElementById('unlock-btn');
+    const recoveryToggle = document.getElementById('recovery-toggle');
+    const recoveryPanel = document.getElementById('recovery-panel');
+    const recoveryPassInput = document.getElementById('recovery-pass');
+    const recoveryCountSelect = document.getElementById('recovery-count');
 
     const keyfileDrop = document.getElementById('keyfile-drop');
     const keyfileInput = document.getElementById('keyfile-input');
@@ -109,6 +116,8 @@
             keyfileLabel: "📂 „Schlüssel-Datei“ (Keyfile) als 2-Faktor-Schutz nutzen (optional)",
             keyfileDropTitle: "[HIER KEYFILE ZIEHEN]",
             keyfileDropSub: "Bild, MP3 oder beliebige Datei als Schlüssel nutzen",
+            genKeyfileBtn: "🔑 Keyfile lokal generieren",
+            genKeyfileHint: "Erstellt eine zufällige Keyfile-Datei lokal auf deinem Gerät.",
             profileLabel: "🔐 Sicherheitsprofil (für neue LOCK-Dateien)",
             profileBalanced: "Balanced | PBKDF2-SHA256 | 600k | 1 Layer",
             profileHardened: "Hardened | PBKDF2-SHA512 | 1,2M | 1 Layer",
@@ -118,7 +127,32 @@
             cloudLabel: "☁️ Cloud-Mode (Zero-Knowledge): zufälliger Dateiname, Padding, Integritäts-Hash",
             cloudHintOn: "Cloud-Mode aktiv: Fortress + Keyfile-Pflicht + SHA-256-Hash zur Upload-Kontrolle.",
             cloudHintOff: "Für Cloud-Backup ohne Klartextdaten. Empfohlen mit Keyfile.",
+            cloudPadLabel: "Cloud-Padding Blockgröße",
+            cloudPad1: "1 MB",
+            cloudPad4: "4 MB",
+            cloudPad8: "8 MB",
+            cloudChaffLabel: "Cloud-Tarnmodus: zufällige Lockvogel-Dateien hinzufügen",
             requireKeyfileLabel: "Keyfile für LOCK erzwingen (empfohlen für sensible Daten)",
+            recoveryToggleLabel: "🔁 Recovery ohne Keyfile erlauben (2. Passwort + Sicherheitsfragen)",
+            recoveryPassLabel: "Recovery-Passwort (anders als Master-Passwort)",
+            recoveryPassPlaceholder: "Recovery-Passwort...",
+            recoveryCountLabel: "Anzahl Sicherheitsfragen (1-5)",
+            recoveryCount1: "1 Frage",
+            recoveryCount2: "2 Fragen",
+            recoveryCount3: "3 Fragen",
+            recoveryCount4: "4 Fragen",
+            recoveryCount5: "5 Fragen",
+            recoveryQ1: "Frage 1",
+            recoveryQ2: "Frage 2",
+            recoveryQ3: "Frage 3",
+            recoveryQ4: "Frage 4",
+            recoveryQ5: "Frage 5",
+            recoveryA1: "Antwort 1",
+            recoveryA2: "Antwort 2",
+            recoveryA3: "Antwort 3",
+            recoveryA4: "Antwort 4",
+            recoveryA5: "Antwort 5",
+            recoveryNote: "Nur wenn alle Antworten exakt stimmen, ist UNLOCK ohne Keyfile möglich.",
             clearSecretLabel: "Passwort nach jeder Aktion automatisch löschen",
             autoLockLabel: "Auto-Lock bei Inaktivität",
             autoLockOff: "Aus",
@@ -143,6 +177,12 @@
             errorKeyfileMissing: "❌ Fehler: Keyfile aktiviert, aber keine Datei gewählt!",
             errorCloudNeedsKeyfile: "❌ Cloud-Mode braucht zwingend eine Keyfile.",
             errorRequireKeyfile: "❌ LOCK blockiert: Diese Einstellung verlangt eine Keyfile.",
+            errorRecoveryNeedsKeyfile: "❌ Recovery kann nur mit aktivem Keyfile erstellt werden.",
+            errorRecoveryNeedsPass: "❌ Recovery aktiviert: Bitte Recovery-Passwort setzen.",
+            errorRecoveryNeedsQuestions: "❌ Recovery aktiviert: Bitte 1-5 Fragen mit Antworten vollständig ausfüllen.",
+            errorRecoveryAnswerMissing: "❌ Recovery-UNLOCK: Bitte alle erforderlichen Antworten eingeben.",
+            errorRecoverySamePassword: "❌ Recovery-Passwort muss sich vom Master-Passwort unterscheiden.",
+            recoveryPromptReady: "ℹ️ Recovery verfügbar: Bitte Recovery-Passwort und Antworten eingeben.",
             errorPasswordShort: "❌ LOCK blockiert: Nutze mindestens 10 Zeichen Passwort.",
             errorUnlockSingle: "❌ Für UNLOCK bitte genau eine .neon-Datei auswählen.",
             weakConfirm: "Passwort ist eher schwach. Trotzdem fortfahren?",
@@ -150,6 +190,7 @@
             cryptoError: "❌ FEHLER / INTEGRITÄTS-CHECK GESCHEITERT!\n(Falsches Passwort/Keyfile oder Datei beschädigt)",
             unexpectedError: "❌ Unerwarteter Fehler. Bitte Seite neu laden und erneut versuchen.",
             keyfileLoaded: "✅ Keyfile geladen:",
+            keyfileGenerated: "✅ Keyfile lokal generiert und geladen:",
             doneCloud: "✅ FERTIG:",
             doneCloudSuffix: "+ SHA-256-Hash exportiert (Cloud-Mode).",
             doneLock: "✅ FERTIG:",
@@ -173,6 +214,7 @@
             reportNo: "Nein",
             reportAad: "Header-AAD",
             reportCloud: "Cloud-Hash",
+            reportRecovery: "Recovery",
             reportActive: "Aktiv",
             reportEmpty: "Noch kein Sicherheitsbericht verfügbar."
         },
@@ -204,6 +246,8 @@
             keyfileLabel: "📂 Use a keyfile as 2nd factor (optional)",
             keyfileDropTitle: "[DROP KEYFILE HERE]",
             keyfileDropSub: "Use image, MP3 or any file as key",
+            genKeyfileBtn: "🔑 Generate local keyfile",
+            genKeyfileHint: "Creates a random keyfile locally on your device.",
             profileLabel: "🔐 Security profile (for new LOCK files)",
             profileBalanced: "Balanced | PBKDF2-SHA256 | 600k | 1 layer",
             profileHardened: "Hardened | PBKDF2-SHA512 | 1.2M | 1 layer",
@@ -213,7 +257,32 @@
             cloudLabel: "☁️ Cloud mode (Zero-Knowledge): random filename, padding, integrity hash",
             cloudHintOn: "Cloud mode active: Fortress + required keyfile + SHA-256 upload verification.",
             cloudHintOff: "For cloud backups without plaintext leakage. Keyfile recommended.",
+            cloudPadLabel: "Cloud padding block size",
+            cloudPad1: "1 MB",
+            cloudPad4: "4 MB",
+            cloudPad8: "8 MB",
+            cloudChaffLabel: "Cloud stealth mode: add random decoy files",
             requireKeyfileLabel: "Require keyfile for LOCK (recommended for sensitive data)",
+            recoveryToggleLabel: "🔁 Allow recovery without keyfile (2nd password + security questions)",
+            recoveryPassLabel: "Recovery password (different from master password)",
+            recoveryPassPlaceholder: "Recovery password...",
+            recoveryCountLabel: "Number of security questions (1-5)",
+            recoveryCount1: "1 question",
+            recoveryCount2: "2 questions",
+            recoveryCount3: "3 questions",
+            recoveryCount4: "4 questions",
+            recoveryCount5: "5 questions",
+            recoveryQ1: "Question 1",
+            recoveryQ2: "Question 2",
+            recoveryQ3: "Question 3",
+            recoveryQ4: "Question 4",
+            recoveryQ5: "Question 5",
+            recoveryA1: "Answer 1",
+            recoveryA2: "Answer 2",
+            recoveryA3: "Answer 3",
+            recoveryA4: "Answer 4",
+            recoveryA5: "Answer 5",
+            recoveryNote: "UNLOCK without keyfile works only if every answer is exactly correct.",
             clearSecretLabel: "Auto-clear password after each action",
             autoLockLabel: "Auto-lock on inactivity",
             autoLockOff: "Off",
@@ -238,6 +307,12 @@
             errorKeyfileMissing: "❌ Error: Keyfile enabled, but no file selected!",
             errorCloudNeedsKeyfile: "❌ Cloud mode requires a keyfile.",
             errorRequireKeyfile: "❌ LOCK blocked: This setting requires a keyfile.",
+            errorRecoveryNeedsKeyfile: "❌ Recovery can only be created with an active keyfile.",
+            errorRecoveryNeedsPass: "❌ Recovery enabled: Please set a recovery password.",
+            errorRecoveryNeedsQuestions: "❌ Recovery enabled: Please provide 1-5 complete question/answer pairs.",
+            errorRecoveryAnswerMissing: "❌ Recovery UNLOCK: Please enter all required answers.",
+            errorRecoverySamePassword: "❌ Recovery password must be different from the master password.",
+            recoveryPromptReady: "ℹ️ Recovery available: Enter recovery password and answers.",
             errorPasswordShort: "❌ LOCK blocked: Use at least 10 password characters.",
             errorUnlockSingle: "❌ For UNLOCK, please select exactly one .neon file.",
             weakConfirm: "Password looks weak. Continue anyway?",
@@ -245,6 +320,7 @@
             cryptoError: "❌ ERROR / INTEGRITY CHECK FAILED!\n(Wrong password/keyfile or damaged file)",
             unexpectedError: "❌ Unexpected error. Please reload the page and try again.",
             keyfileLoaded: "✅ Keyfile loaded:",
+            keyfileGenerated: "✅ Keyfile generated locally and loaded:",
             doneCloud: "✅ DONE:",
             doneCloudSuffix: "+ SHA-256 hash exported (Cloud mode).",
             doneLock: "✅ DONE:",
@@ -268,6 +344,7 @@
             reportNo: "No",
             reportAad: "Header-AAD",
             reportCloud: "Cloud hash",
+            reportRecovery: "Recovery",
             reportActive: "Active",
             reportEmpty: "No security report yet."
         }
@@ -389,6 +466,182 @@
         return normalizeFilesWithVaultPath(dataTransfer.files || []);
     }
 
+    function toBase64(bytes) {
+        let binary = "";
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+        }
+        return btoa(binary);
+    }
+
+    function fromBase64(text) {
+        const binary = atob(text);
+        const out = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+        return out;
+    }
+
+    function normalizeSecretText(value) {
+        return String(value || "").trim();
+    }
+
+    function getRecoveryQuestionInput(index) {
+        return document.getElementById("recovery-q" + index);
+    }
+
+    function getRecoveryAnswerInput(index) {
+        return document.getElementById("recovery-a" + index);
+    }
+
+    function updateRecoveryRowsVisibility() {
+        const count = Math.min(5, Math.max(1, Number(recoveryCountSelect.value || 3)));
+        for (let i = 1; i <= 5; i++) {
+            const row = document.getElementById("recovery-row-" + i);
+            if (!row) continue;
+            row.classList.toggle("hidden", i > count);
+        }
+    }
+
+    function toggleRecoveryPanel() {
+        recoveryPanel.classList.toggle("active", recoveryToggle.checked);
+    }
+
+    function collectRecoveryPairsForLock() {
+        const count = Math.min(5, Math.max(1, Number(recoveryCountSelect.value || 3)));
+        const pairs = [];
+        for (let i = 1; i <= count; i++) {
+            const q = normalizeSecretText(getRecoveryQuestionInput(i)?.value);
+            const a = normalizeSecretText(getRecoveryAnswerInput(i)?.value);
+            if (!q || !a) return null;
+            pairs.push({ q, a });
+        }
+        return pairs.length > 0 ? pairs : null;
+    }
+
+    function collectRecoveryAnswersForUnlock(questions) {
+        const answers = [];
+        for (let i = 0; i < questions.length; i++) {
+            const answer = normalizeSecretText(getRecoveryAnswerInput(i + 1)?.value);
+            if (!answer) return null;
+            answers.push(answer);
+        }
+        return answers;
+    }
+
+    async function deriveRecoveryKey(recoveryPassword, questions, answers, salt, iterations) {
+        const encoder = new TextEncoder();
+        const pairs = questions.map((question, index) => {
+            return "[" + (index + 1) + "]" + normalizeSecretText(question) + "=" + normalizeSecretText(answers[index] || "");
+        }).join("|");
+        const seed = concatUint8(
+            encoder.encode("NEON-RECOVERY|"),
+            encoder.encode(normalizeSecretText(recoveryPassword)),
+            encoder.encode("|"),
+            encoder.encode(pairs)
+        );
+        const material = await crypto.subtle.importKey("raw", seed, "PBKDF2", false, ["deriveKey"]);
+        return crypto.subtle.deriveKey(
+            { name: "PBKDF2", salt, iterations, hash: "SHA-512" },
+            material,
+            { name: "AES-GCM", length: 256 },
+            false,
+            ["encrypt", "decrypt"]
+        );
+    }
+
+    async function buildRecoveryPackage(recoveryPassword, pairs, keyDigest) {
+        const salt = randomBytes(16);
+        const iv = randomBytes(12);
+        const iterations = 700000;
+        const questions = pairs.map((pair) => pair.q);
+        const answers = pairs.map((pair) => pair.a);
+        const key = await deriveRecoveryKey(recoveryPassword, questions, answers, salt, iterations);
+        const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, keyDigest));
+        return {
+            v: 1,
+            iter: iterations,
+            hash: "SHA-512",
+            q: questions,
+            salt: toBase64(salt),
+            iv: toBase64(iv),
+            ct: toBase64(ciphertext)
+        };
+    }
+
+    async function tryRecoverKeyDigest(recoveryMeta) {
+        const recoveryPassword = normalizeSecretText(recoveryPassInput.value);
+        if (!recoveryPassword) {
+            throw new Error(t("errorRecoveryNeedsPass"));
+        }
+        const questions = Array.isArray(recoveryMeta.q) ? recoveryMeta.q : [];
+        const answers = collectRecoveryAnswersForUnlock(questions);
+        if (!answers) {
+            throw new Error(t("errorRecoveryAnswerMissing"));
+        }
+        const salt = fromBase64(recoveryMeta.salt);
+        const iv = fromBase64(recoveryMeta.iv);
+        const ciphertext = fromBase64(recoveryMeta.ct);
+        const iterations = Number.isInteger(recoveryMeta.iter) ? recoveryMeta.iter : 700000;
+        const key = await deriveRecoveryKey(recoveryPassword, questions, answers, salt, iterations);
+        return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext));
+    }
+
+    function getCloudPadUnitBytes() {
+        const mb = Math.max(1, Math.min(8, Number(cloudPadSelect.value || 1)));
+        return mb * 1024 * 1024;
+    }
+
+    async function generateLocalKeyfile() {
+        const bytes = randomBytes(1024 * 1024);
+        const ts = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+        const filename = "neon-keyfile-" + ts + ".bin";
+        downloadBlob(new Blob([bytes], { type: "application/octet-stream" }), filename);
+        keyfileBytes = bytes;
+        keyfileDisplayName = filename;
+        if (!keyfileToggle.checked) {
+            keyfileToggle.checked = true;
+            toggleKeyfileUI();
+        }
+        updateKeyfileStatus();
+        const log = document.getElementById('log');
+        log.innerText = t("keyfileGenerated") + " " + filename;
+        log.style.color = "var(--success)";
+    }
+
+    function setRecoveryQuestionReadOnly(flag, count = 5) {
+        for (let i = 1; i <= 5; i++) {
+            const input = getRecoveryQuestionInput(i);
+            if (!input) continue;
+            input.readOnly = flag && i <= count;
+        }
+    }
+
+    function applyRecoveryMetaToUi(recoveryMeta) {
+        if (!recoveryMeta || !Array.isArray(recoveryMeta.q) || recoveryMeta.q.length === 0) {
+            setRecoveryQuestionReadOnly(false, 0);
+            return;
+        }
+        const count = Math.min(5, recoveryMeta.q.length);
+        recoveryToggle.checked = true;
+        toggleRecoveryPanel();
+        recoveryCountSelect.value = String(count);
+        updateRecoveryRowsVisibility();
+        for (let i = 1; i <= count; i++) {
+            const qInput = getRecoveryQuestionInput(i);
+            if (qInput) qInput.value = recoveryMeta.q[i - 1];
+        }
+        setRecoveryQuestionReadOnly(true, count);
+    }
+
+    async function getRecoveryMetaFromFile(file) {
+        if (!file) return null;
+        const fullData = new Uint8Array(await file.arrayBuffer());
+        if (!startsWithMagic(fullData)) return null;
+        const parsed = parseV2Envelope(fullData);
+        return parsed?.header?.recovery || null;
+    }
+
     function wipePreviewUrls() {
         while (previewObjectUrls.length > 0) {
             const url = previewObjectUrls.pop();
@@ -460,13 +713,14 @@
             t("reportProfile") + ": " + profile.label,
             t("reportKdf") + ": PBKDF2-" + profile.hash + " / " + profile.iterations,
             t("reportLayers") + ": " + profile.layers,
-            t("reportKeyfile") + ": " + getYesNoLabel(Boolean(keyfileBytes)),
+            t("reportKeyfile") + ": " + getYesNoLabel(Boolean(keyfileToggle.checked && keyfileBytes)),
             t("reportAad") + ": " + t("reportActive"),
-            t("reportCloud") + ": " + getYesNoLabel(cloudModeEnabled)
+            t("reportCloud") + ": " + getYesNoLabel(cloudModeEnabled),
+            t("reportRecovery") + ": " + getYesNoLabel(recoveryToggle.checked)
         ]);
     }
 
-    function setUnlockSecurityReport(useV2, header) {
+    function setUnlockSecurityReport(useV2, header, keyfileWasUsed) {
         if (useV2 && header) {
             const hash = typeof header.kdf?.hash === "string" ? header.kdf.hash : "SHA-256";
             const iterations = Number.isInteger(header.kdf?.iterations) ? header.kdf.iterations : LEGACY_KDF.iterations;
@@ -477,9 +731,10 @@
                 t("reportProfile") + ": NEON2",
                 t("reportKdf") + ": PBKDF2-" + hash + " / " + iterations,
                 t("reportLayers") + ": " + layers,
-                t("reportKeyfile") + ": " + getYesNoLabel(Boolean(keyfileBytes)),
+                t("reportKeyfile") + ": " + getYesNoLabel(keyfileWasUsed),
                 t("reportAad") + ": " + (header.aad === 1 ? t("reportActive") : t("reportNo")),
-                t("reportCloud") + ": " + getYesNoLabel(header.cloud === 1)
+                t("reportCloud") + ": " + getYesNoLabel(header.cloud === 1),
+                t("reportRecovery") + ": " + getYesNoLabel(Boolean(header.recovery))
             ]);
             return;
         }
@@ -490,9 +745,10 @@
             t("reportProfile") + ": " + t("reportLegacy"),
             t("reportKdf") + ": PBKDF2-" + LEGACY_KDF.hash + " / " + LEGACY_KDF.iterations,
             t("reportLayers") + ": 1",
-            t("reportKeyfile") + ": " + getYesNoLabel(Boolean(keyfileBytes)),
+            t("reportKeyfile") + ": " + getYesNoLabel(keyfileWasUsed),
             t("reportAad") + ": " + t("reportNo"),
-            t("reportCloud") + ": " + t("reportNo")
+            t("reportCloud") + ": " + t("reportNo"),
+            t("reportRecovery") + ": " + t("reportNo")
         ]);
     }
 
@@ -522,6 +778,8 @@
         document.getElementById("keyfile-label").textContent = t("keyfileLabel");
         document.getElementById("keyfile-drop-title").textContent = t("keyfileDropTitle");
         document.getElementById("keyfile-drop-sub").textContent = t("keyfileDropSub");
+        document.getElementById("gen-keyfile-btn").textContent = t("genKeyfileBtn");
+        document.getElementById("gen-keyfile-hint").textContent = t("genKeyfileHint");
         document.getElementById("profile-label").textContent = t("profileLabel");
         document.getElementById("profile-balanced").textContent = t("profileBalanced");
         document.getElementById("profile-hardened").textContent = t("profileHardened");
@@ -529,7 +787,32 @@
         document.getElementById("profile-apex").textContent = t("profileApex");
         document.getElementById("profile-quantum").textContent = t("profileQuantum");
         document.getElementById("cloud-label").textContent = t("cloudLabel");
+        document.getElementById("cloud-pad-label").textContent = t("cloudPadLabel");
+        document.getElementById("cloud-pad-1").textContent = t("cloudPad1");
+        document.getElementById("cloud-pad-4").textContent = t("cloudPad4");
+        document.getElementById("cloud-pad-8").textContent = t("cloudPad8");
+        document.getElementById("cloud-chaff-label").textContent = t("cloudChaffLabel");
         document.getElementById("require-keyfile-label").textContent = t("requireKeyfileLabel");
+        document.getElementById("recovery-toggle-label").textContent = t("recoveryToggleLabel");
+        document.getElementById("recovery-pass-label").textContent = t("recoveryPassLabel");
+        document.getElementById("recovery-count-label").textContent = t("recoveryCountLabel");
+        recoveryPassInput.placeholder = t("recoveryPassPlaceholder");
+        document.querySelector("#recovery-count option[value='1']").textContent = t("recoveryCount1");
+        document.querySelector("#recovery-count option[value='2']").textContent = t("recoveryCount2");
+        document.querySelector("#recovery-count option[value='3']").textContent = t("recoveryCount3");
+        document.querySelector("#recovery-count option[value='4']").textContent = t("recoveryCount4");
+        document.querySelector("#recovery-count option[value='5']").textContent = t("recoveryCount5");
+        document.getElementById("recovery-q1").placeholder = t("recoveryQ1");
+        document.getElementById("recovery-q2").placeholder = t("recoveryQ2");
+        document.getElementById("recovery-q3").placeholder = t("recoveryQ3");
+        document.getElementById("recovery-q4").placeholder = t("recoveryQ4");
+        document.getElementById("recovery-q5").placeholder = t("recoveryQ5");
+        document.getElementById("recovery-a1").placeholder = t("recoveryA1");
+        document.getElementById("recovery-a2").placeholder = t("recoveryA2");
+        document.getElementById("recovery-a3").placeholder = t("recoveryA3");
+        document.getElementById("recovery-a4").placeholder = t("recoveryA4");
+        document.getElementById("recovery-a5").placeholder = t("recoveryA5");
+        document.getElementById("recovery-note").textContent = t("recoveryNote");
         document.getElementById("clear-secret-label").textContent = t("clearSecretLabel");
         document.getElementById("auto-lock-label").textContent = t("autoLockLabel");
         document.getElementById("auto-lock-off").textContent = t("autoLockOff");
@@ -554,6 +837,8 @@
         document.getElementById("lang-de").classList.toggle("active", currentLang === "de");
         document.getElementById("lang-en").classList.toggle("active", currentLang === "en");
         applyStaticTranslations();
+        updateRecoveryRowsVisibility();
+        toggleRecoveryPanel();
         updateProfileHint();
         updateFileInfo();
         updateKeyfileStatus();
@@ -684,10 +969,14 @@
             keyfileToggle.disabled = true;
             requireKeyfileToggle.checked = true;
             requireKeyfileToggle.disabled = true;
+            cloudPadSelect.disabled = false;
+            cloudChaffToggle.disabled = false;
         } else {
             profileSelect.disabled = false;
             keyfileToggle.disabled = false;
             requireKeyfileToggle.disabled = false;
+            cloudPadSelect.disabled = true;
+            cloudChaffToggle.disabled = true;
         }
         updateProfileHint();
     }
@@ -706,14 +995,39 @@
         toggleKeyfileUI();
         resetInactivityTimer();
     });
+    recoveryToggle.addEventListener('change', () => {
+        toggleRecoveryPanel();
+        resetInactivityTimer();
+    });
+    recoveryCountSelect.addEventListener('change', () => {
+        updateRecoveryRowsVisibility();
+        resetInactivityTimer();
+    });
+    cloudPadSelect.addEventListener('change', resetInactivityTimer);
+    cloudChaffToggle.addEventListener('change', resetInactivityTimer);
+    recoveryPassInput.addEventListener('input', resetInactivityTimer);
+    for (let i = 1; i <= 5; i++) {
+        getRecoveryQuestionInput(i).addEventListener('input', resetInactivityTimer);
+        getRecoveryAnswerInput(i).addEventListener('input', resetInactivityTimer);
+    }
     autoLockSelect.addEventListener('change', updateAutoLockWatchers);
     passToggle.addEventListener('click', togglePass);
     lockButton.addEventListener('click', () => process('lock'));
     unlockButton.addEventListener('click', () => process('unlock'));
+    genKeyfileButton.addEventListener('click', () => {
+        generateLocalKeyfile().catch((error) => {
+            console.error(error);
+            const log = document.getElementById('log');
+            log.innerText = t("unexpectedError");
+            log.style.color = "var(--warning)";
+        });
+    });
     pickFilesButton.addEventListener('click', () => fileInput.click());
     pickFolderButton.addEventListener('click', () => folderInput.click());
     setLanguage(localStorage.getItem("neon-lang") || "de");
     updatePasswordStrength();
+    updateRecoveryRowsVisibility();
+    toggleRecoveryPanel();
     toggleCloudMode();
     updateAutoLockWatchers();
 
@@ -801,6 +1115,9 @@
 
     function handleFiles(files) {
         currentFiles = normalizeFilesWithVaultPath(files);
+        if (currentFiles.length !== 1) {
+            setRecoveryQuestionReadOnly(false, 0);
+        }
         updateFileInfo();
         resetInactivityTimer();
     }
@@ -810,6 +1127,7 @@
         const log = document.getElementById('log');
         const useKeyfile = keyfileToggle.checked;
         const cloudMode = getCloudModeEnabled();
+        let recoveryPairs = null;
 
         if (!assertTrustedContext(log)) return;
 
@@ -823,12 +1141,27 @@
             log.style.color = "var(--warning)";
             return;
         }
+        if (action === 'lock') {
+            setRecoveryQuestionReadOnly(false, 0);
+        }
         if (action === 'unlock' && currentFiles.length !== 1) {
             log.innerText = t("errorUnlockSingle");
             log.style.color = "var(--warning)";
             return;
         }
-        if (useKeyfile && !keyfileBytes) {
+        if (action === 'unlock') {
+            try {
+                const recoveryMeta = await getRecoveryMetaFromFile(currentFiles[0]);
+                if (recoveryMeta) {
+                    applyRecoveryMetaToUi(recoveryMeta);
+                    log.innerText = t("recoveryPromptReady");
+                    log.style.color = "var(--caution)";
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
+        if (action === 'lock' && useKeyfile && !keyfileBytes) {
             log.innerText = t("errorKeyfileMissing");
             log.style.color = "var(--warning)";
             return;
@@ -842,6 +1175,30 @@
             log.innerText = t("errorRequireKeyfile");
             log.style.color = "var(--warning)";
             return;
+        }
+        if (action === 'lock' && recoveryToggle.checked) {
+            if (!useKeyfile || !keyfileBytes) {
+                log.innerText = t("errorRecoveryNeedsKeyfile");
+                log.style.color = "var(--warning)";
+                return;
+            }
+            const recoveryPassword = normalizeSecretText(recoveryPassInput.value);
+            if (!recoveryPassword) {
+                log.innerText = t("errorRecoveryNeedsPass");
+                log.style.color = "var(--warning)";
+                return;
+            }
+            if (recoveryPassword === pw) {
+                log.innerText = t("errorRecoverySamePassword");
+                log.style.color = "var(--warning)";
+                return;
+            }
+            recoveryPairs = collectRecoveryPairsForLock();
+            if (!recoveryPairs) {
+                log.innerText = t("errorRecoveryNeedsQuestions");
+                log.style.color = "var(--warning)";
+                return;
+            }
         }
 
         if (action === 'lock') {
@@ -865,13 +1222,14 @@
         setTimeout(async () => {
             try {
                 if (action === 'lock') {
-                    await lock(pw);
+                    await lock(pw, recoveryPairs);
                 } else {
                     await unlock(pw);
                 }
             } catch (e) {
                 console.error(e);
-                log.innerText = t("cryptoError");
+                const message = typeof e?.message === "string" ? e.message : "";
+                log.innerText = message.startsWith("❌") ? message : t("cryptoError");
                 log.style.color = "var(--warning)";
                 setSecurityReport([]);
             } finally {
@@ -976,7 +1334,9 @@
         const passBytes = encoder.encode(password);
         const keyDigest = keyBytes
             ? new Uint8Array(await crypto.subtle.digest("SHA-512", keyBytes))
-            : new Uint8Array(0);
+            : recoveredKeyDigestOverride instanceof Uint8Array
+                ? recoveredKeyDigestOverride
+                : new Uint8Array(0);
         const seed = concatUint8(encoder.encode("NEON2-KM2|"), passBytes, encoder.encode("|"), keyDigest);
         const material = new Uint8Array(await crypto.subtle.digest("SHA-512", seed));
         return crypto.subtle.importKey("raw", material, "PBKDF2", false, ["deriveKey"]);
@@ -987,7 +1347,9 @@
         const passBytes = encoder.encode(password);
         const keyDigest = keyBytes
             ? new Uint8Array(await crypto.subtle.digest("SHA-512", keyBytes))
-            : new Uint8Array(0);
+            : recoveredKeyDigestOverride instanceof Uint8Array
+                ? recoveredKeyDigestOverride
+                : new Uint8Array(0);
 
         const phase1Seed = concatUint8(encoder.encode("NEON2-QM3|"), passBytes, encoder.encode("|"), keyDigest);
         const phase1 = new Uint8Array(await crypto.subtle.digest("SHA-512", phase1Seed));
@@ -1039,10 +1401,11 @@
         );
     }
 
-    async function lock(pw) {
+    async function lock(pw, recoveryPairs) {
         const log = document.getElementById('log');
         const encoder = new TextEncoder();
         const cloudMode = getCloudModeEnabled();
+        const keyBytesForLock = keyfileToggle.checked ? keyfileBytes : null;
         const selectedProfileKey = cloudMode ? "fortress" : getSelectedProfileKey();
         const profile = SECURITY_PROFILES[selectedProfileKey];
 
@@ -1054,13 +1417,33 @@
             dataParts.push(writeUint32LE(header.length), header, content);
         }
 
+        if (cloudMode && cloudChaffToggle.checked) {
+            const decoyCount = 1 + (randomBytes(1)[0] % 3);
+            for (let i = 0; i < decoyCount; i++) {
+                const name = ".mask-" + toHex(randomBytes(6)) + ".bin";
+                const sizeSeed = randomBytes(2);
+                const decoySize = 4096 + ((sizeSeed[0] << 8) | sizeSeed[1]) % 65536;
+                const decoyData = randomBytes(decoySize);
+                const decoyHeader = encoder.encode(JSON.stringify({ n: name, t: "application/octet-stream", s: decoyData.length, d: 1 }));
+                dataParts.push(writeUint32LE(decoyHeader.length), decoyHeader, decoyData);
+            }
+        }
+
         let payload = new Uint8Array(await new Blob(dataParts).arrayBuffer());
         let plainPad = 0;
         if (cloudMode) {
-            plainPad = (CLOUD_PAD_UNIT - (payload.length % CLOUD_PAD_UNIT)) % CLOUD_PAD_UNIT;
+            const cloudPadUnit = getCloudPadUnitBytes();
+            plainPad = (cloudPadUnit - (payload.length % cloudPadUnit)) % cloudPadUnit;
             if (plainPad > 0) {
                 payload = concatUint8(payload, randomBytes(plainPad));
             }
+        }
+
+        let recoveryMeta = null;
+        if (Array.isArray(recoveryPairs) && recoveryPairs.length > 0 && keyBytesForLock) {
+            const recoveryPassword = normalizeSecretText(recoveryPassInput.value);
+            const keyDigest = new Uint8Array(await crypto.subtle.digest("SHA-512", keyBytesForLock));
+            recoveryMeta = await buildRecoveryPackage(recoveryPassword, recoveryPairs, keyDigest);
         }
 
         const envelopeMeta = {
@@ -1071,7 +1454,12 @@
             aad: 1,
             padPlain: plainPad
         };
-        if (cloudMode) envelopeMeta.cloud = 1;
+        if (cloudMode) {
+            envelopeMeta.cloud = 1;
+            envelopeMeta.padUnitMb = Number(cloudPadSelect.value || 1);
+            if (cloudChaffToggle.checked) envelopeMeta.chaff = 1;
+        }
+        if (recoveryMeta) envelopeMeta.recovery = recoveryMeta;
         const envelopeHeader = encoder.encode(JSON.stringify(envelopeMeta));
 
         for (let layer = 1; layer <= profile.layers; layer++) {
@@ -1079,7 +1467,7 @@
             const iv = randomBytes(12);
             const key = await deriveAesKey(
                 pw,
-                keyfileBytes,
+                keyBytesForLock,
                 salt,
                 profile,
                 "layer-" + layer,
@@ -1151,12 +1539,21 @@
         if (!Number.isInteger(header.padPlain) || header.padPlain < 0 || header.padPlain > (32 * 1024 * 1024)) {
             throw new Error("Defekte NEON2-Datei: Padding-Wert ungültig.");
         }
+        if (header.recovery !== undefined) {
+            const recovery = header.recovery;
+            const validQuestions = Array.isArray(recovery?.q) && recovery.q.length >= 1 && recovery.q.length <= 5;
+            const validStrings = typeof recovery?.salt === "string" && typeof recovery?.iv === "string" && typeof recovery?.ct === "string";
+            const validIter = Number.isInteger(recovery?.iter) && recovery.iter >= 100000 && recovery.iter <= 3000000;
+            if (!validQuestions || !validStrings || !validIter) {
+                throw new Error("Defekte NEON2-Datei: Recovery-Daten ungültig.");
+            }
+        }
 
         validateKdfConfig(header.kdf);
         return { header: header, headerBytes: headerBytes, payload: fullData.slice(offset) };
     }
 
-    async function decryptLegacy(fullData, password) {
+    async function decryptLegacy(fullData, password, keyBytes) {
         if (fullData.length < 29) {
             throw new Error("Defekte Legacy-Datei.");
         }
@@ -1164,39 +1561,47 @@
         const salt = fullData.slice(0, 16);
         const iv = fullData.slice(16, 28);
         const encrypted = fullData.slice(28);
-        const key = await deriveLegacyKey(password, keyfileBytes, salt, "decrypt");
+        const key = await deriveLegacyKey(password, keyBytes, salt, "decrypt");
         return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, encrypted));
     }
 
-    async function decryptV2(fullData, password) {
+    async function decryptV2(fullData, password, keyBytes) {
         const parsed = parseV2Envelope(fullData);
         const kdf = parsed.header.kdf;
         const useAad = parsed.header.aad === 1;
 
-        let payload = parsed.payload;
-        for (let layer = parsed.header.layers; layer >= 1; layer--) {
-            if (payload.length < 29) {
-                throw new Error("Defekte NEON2-Datei: Layer " + layer + " zu kurz.");
+        if (!keyBytes && parsed.header.recovery) {
+            recoveredKeyDigestOverride = await tryRecoverKeyDigest(parsed.header.recovery);
+        }
+
+        try {
+            let payload = parsed.payload;
+            for (let layer = parsed.header.layers; layer >= 1; layer--) {
+                if (payload.length < 29) {
+                    throw new Error("Defekte NEON2-Datei: Layer " + layer + " zu kurz.");
+                }
+                const salt = payload.slice(0, 16);
+                const iv = payload.slice(16, 28);
+                const encrypted = payload.slice(28);
+
+                const key = await deriveAesKey(password, keyBytes, salt, kdf, "layer-" + layer, "decrypt", parsed.header.km);
+                const params = useAad
+                    ? { name: "AES-GCM", iv: iv, additionalData: buildLayerAad(parsed.headerBytes, layer) }
+                    : { name: "AES-GCM", iv: iv };
+                payload = new Uint8Array(await crypto.subtle.decrypt(params, key, encrypted));
             }
-            const salt = payload.slice(0, 16);
-            const iv = payload.slice(16, 28);
-            const encrypted = payload.slice(28);
 
-            const key = await deriveAesKey(password, keyfileBytes, salt, kdf, "layer-" + layer, "decrypt", parsed.header.km);
-            const params = useAad
-                ? { name: "AES-GCM", iv: iv, additionalData: buildLayerAad(parsed.headerBytes, layer) }
-                : { name: "AES-GCM", iv: iv };
-            payload = new Uint8Array(await crypto.subtle.decrypt(params, key, encrypted));
-        }
+            if (parsed.header.padPlain > payload.length) {
+                throw new Error("Defekte NEON2-Datei: Padding größer als Inhalt.");
+            }
+            if (parsed.header.padPlain > 0) {
+                payload = payload.slice(0, payload.length - parsed.header.padPlain);
+            }
 
-        if (parsed.header.padPlain > payload.length) {
-            throw new Error("Defekte NEON2-Datei: Padding größer als Inhalt.");
+            return { plaintext: payload, header: parsed.header };
+        } finally {
+            recoveredKeyDigestOverride = null;
         }
-        if (parsed.header.padPlain > 0) {
-            payload = payload.slice(0, payload.length - parsed.header.padPlain);
-        }
-
-        return { plaintext: payload, header: parsed.header };
     }
 
     function parseVaultEntries(decrypted) {
@@ -1231,6 +1636,9 @@
             const fileData = decrypted.slice(offset, offset + header.s);
             offset += header.s;
 
+            if (header.d === 1) {
+                continue;
+            }
             entries.push({ name: header.n, type: mimeType, data: fileData });
         }
 
@@ -1291,17 +1699,18 @@
         const log = document.getElementById('log');
         const previewGrid = document.getElementById('previews');
         clearPreviewGrid();
+        const keyBytesForUnlock = keyfileToggle.checked ? keyfileBytes : null;
 
         const fullData = new Uint8Array(await currentFiles[0].arrayBuffer());
         const useV2 = startsWithMagic(fullData);
         let decrypted;
         let v2Header = null;
         if (useV2) {
-            const parsed = await decryptV2(fullData, pw);
+            const parsed = await decryptV2(fullData, pw, keyBytesForUnlock);
             decrypted = parsed.plaintext;
             v2Header = parsed.header;
         } else {
-            decrypted = await decryptLegacy(fullData, pw);
+            decrypted = await decryptLegacy(fullData, pw, keyBytesForUnlock);
         }
         const entries = parseVaultEntries(decrypted);
 
@@ -1317,5 +1726,5 @@
                 : t("integrityLegacy");
         }
         log.style.color = "var(--success)";
-        setUnlockSecurityReport(useV2, v2Header);
+        setUnlockSecurityReport(useV2, v2Header, Boolean(keyBytesForUnlock));
     }

@@ -36,16 +36,20 @@ Empfohlene Praxis:
 - AES-256-GCM mit Integritätsprüfung.
 - Sicherheitsprofile: `Balanced`, `Hardened`, `Fortress`, `Apex-5`, `Quantum-8`.
 - Optionales Keyfile als zweiter Faktor.
+- Lokaler Keyfile-Generator (`🔑 Keyfile lokal generieren`).
 - Cloud-Mode mit zufälligem Dateinamen, Padding und `SHA-256`-Prüfdatei.
+- Zusätzliche Cloud-Härtung: wählbare Padding-Blockgröße + optionaler Tarnmodus (Decoy-Dateien).
 - Ganze Ordner verschlüsseln (Drag & Drop oder `Ordner wählen`).
 - Keyfile für `LOCK` erzwingen.
+- Optionaler Recovery-Modus ohne Keyfile: 2. Passwort + 1–5 Sicherheitsfragen.
 - Passwort nach Aktion automatisch löschen.
 - Auto-Lock bei Inaktivität.
 - DE/EN direkt in der Oberfläche umschalten.
 
 ## Was die App nicht kann
 
-- Kein „Passwort vergessen“: Ohne korrektes Passwort/Keyfile ist keine Wiederherstellung möglich.
+- Kein „Passwort vergessen“: Ohne korrektes Passwort ist keine Wiederherstellung möglich.
+- Ohne Keyfile nur dann UNLOCK möglich, wenn Recovery beim LOCK vorher aktiv konfiguriert wurde.
 - Kein System ist „100 % unknackbar“.
 - Eine Browser-App kann Manipulationen am Endgerät oder unsichere Browser-Umgebungen nicht vollständig verhindern.
 

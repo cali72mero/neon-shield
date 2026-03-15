@@ -16,26 +16,48 @@
             iterations: 600000,
             hash: "SHA-256",
             layers: 1,
-            hint: "Schnell und stark. Gute Standardwahl für normale Nutzung."
+            keyMaterialVersion: 2,
+            hintKey: "profileHintBalanced"
         },
         hardened: {
             label: "Hardened",
             iterations: 1200000,
             hash: "SHA-512",
             layers: 1,
-            hint: "Höhere Brute-Force-Kosten, aber merkbar langsamer bei älteren Geräten."
+            keyMaterialVersion: 2,
+            hintKey: "profileHintHardened"
         },
         fortress: {
             label: "Fortress",
             iterations: 1500000,
             hash: "SHA-512",
             layers: 2,
-            hint: "Maximale lokale Härte: hohe KDF-Kosten + doppelte AES-GCM-Verschlüsselung."
+            keyMaterialVersion: 2,
+            hintKey: "profileHintFortress"
+        },
+        apex5: {
+            label: "Apex-5",
+            iterations: 1900000,
+            hash: "SHA-512",
+            layers: 5,
+            keyMaterialVersion: 3,
+            hintKey: "profileHintApex"
+        },
+        quantum8: {
+            label: "Quantum-8",
+            iterations: 2300000,
+            hash: "SHA-512",
+            layers: 8,
+            keyMaterialVersion: 3,
+            hintKey: "profileHintQuantum"
         }
     };
 
     const dropArea = document.getElementById('drop-area');
     const fileInput = document.getElementById('file-input');
+    const folderInput = document.getElementById('folder-input');
+    const pickFilesButton = document.getElementById('pick-files-btn');
+    const pickFolderButton = document.getElementById('pick-folder-btn');
     const fileInfo = document.getElementById('file-info');
     const overlay = document.getElementById('loading-overlay');
     const passInput = document.getElementById('pass');
@@ -70,7 +92,9 @@
             guideAlert: "⚠️ WICHTIG: Ohne korrektes Passwort (und ggf. Keyfile) ist eine Wiederherstellung nicht möglich.",
             guidePrivacy: "<strong>Datenschutz:</strong> Verschlüsselung und Entschlüsselung laufen im Browser. Du entscheidest selbst, wo du die erzeugten Dateien speicherst.",
             filesTitle: "01_DATEIEN AUSWÄHLEN",
-            dropText: "Dateien hierher ziehen oder klicken",
+            dropText: "Dateien oder Ordner hierher ziehen oder klicken",
+            pickFilesBtn: "Dateien wählen",
+            pickFolderBtn: "Ordner wählen",
             noFiles: "Keine Dateien geladen.",
             filesReadySuffix: "Datei(en) bereit",
             securityTitle: "02_SICHERHEITS-SCHLÜSSEL",
@@ -82,6 +106,8 @@
             profileBalanced: "Balanced | PBKDF2-SHA256 | 600k | 1 Layer",
             profileHardened: "Hardened | PBKDF2-SHA512 | 1,2M | 1 Layer",
             profileFortress: "Fortress | PBKDF2-SHA512 | 1,5M | 2 Layer",
+            profileApex: "Apex-5 | PBKDF2-SHA512 | 1,9M | 5 Layer",
+            profileQuantum: "Quantum-8 | PBKDF2-SHA512 | 2,3M | 8 Layer",
             cloudLabel: "☁️ Cloud-Mode (Zero-Knowledge): zufälliger Dateiname, Padding, Integritäts-Hash",
             cloudHintOn: "Cloud-Mode aktiv: Fortress + Keyfile-Pflicht + SHA-256-Hash zur Upload-Kontrolle.",
             cloudHintOff: "Für Cloud-Backup ohne Klartextdaten. Empfohlen mit Keyfile.",
@@ -101,6 +127,8 @@
             profileHintBalanced: "Schnell und stark. Gute Standardwahl für normale Nutzung.",
             profileHintHardened: "Höhere Brute-Force-Kosten, aber spürbar langsamer auf älteren Geräten.",
             profileHintFortress: "Maximale lokale Härte: hohe KDF-Kosten + doppelte AES-GCM-Verschlüsselung.",
+            profileHintApex: "Extremprofil: 5 AES-GCM-Layer + starkes KDF-Mixing. Deutlich langsamer, aber robuster.",
+            profileHintQuantum: "Quantum-Hardening: 8 AES-GCM-Layer + mehrfaches KDF-Mixing. Sehr langsam, maximale Härte.",
             trustContextError: "Unsicherer Kontext (ohne HTTPS).",
             blockedContext: "❌ BLOCKIERT: Kryptofunktionen nur in sicherem Kontext erlaubt.",
             errorNoPassword: "❌ Fehler: Passwort fehlt!",
@@ -109,9 +137,11 @@
             errorCloudNeedsKeyfile: "❌ Cloud-Mode braucht zwingend eine Keyfile.",
             errorRequireKeyfile: "❌ LOCK blockiert: Diese Einstellung verlangt eine Keyfile.",
             errorPasswordShort: "❌ LOCK blockiert: Nutze mindestens 10 Zeichen Passwort.",
+            errorUnlockSingle: "❌ Für UNLOCK bitte genau eine .neon-Datei auswählen.",
             weakConfirm: "Passwort ist eher schwach. Trotzdem fortfahren?",
             weakAbort: "⚠️ Abgebrochen: Bitte stärkeres Passwort wählen.",
             cryptoError: "❌ FEHLER / INTEGRITÄTS-CHECK GESCHEITERT!\n(Falsches Passwort/Keyfile oder Datei beschädigt)",
+            unexpectedError: "❌ Unerwarteter Fehler. Bitte Seite neu laden und erneut versuchen.",
             keyfileLoaded: "✅ Keyfile geladen:",
             doneCloud: "✅ FERTIG:",
             doneCloudSuffix: "+ SHA-256-Hash exportiert (Cloud-Mode).",
@@ -150,7 +180,9 @@
             guideAlert: "⚠️ IMPORTANT: Without the correct password (and keyfile, if enabled), recovery is not possible.",
             guidePrivacy: "<strong>Privacy:</strong> Encryption and decryption happen in your browser. You decide where generated files are stored.",
             filesTitle: "01_SELECT FILES",
-            dropText: "Drag files here or click",
+            dropText: "Drag files or folders here, or click",
+            pickFilesBtn: "Choose files",
+            pickFolderBtn: "Choose folder",
             noFiles: "No files loaded.",
             filesReadySuffix: "file(s) ready",
             securityTitle: "02_SECURITY KEY",
@@ -162,6 +194,8 @@
             profileBalanced: "Balanced | PBKDF2-SHA256 | 600k | 1 layer",
             profileHardened: "Hardened | PBKDF2-SHA512 | 1.2M | 1 layer",
             profileFortress: "Fortress | PBKDF2-SHA512 | 1.5M | 2 layers",
+            profileApex: "Apex-5 | PBKDF2-SHA512 | 1.9M | 5 layers",
+            profileQuantum: "Quantum-8 | PBKDF2-SHA512 | 2.3M | 8 layers",
             cloudLabel: "☁️ Cloud mode (Zero-Knowledge): random filename, padding, integrity hash",
             cloudHintOn: "Cloud mode active: Fortress + required keyfile + SHA-256 upload verification.",
             cloudHintOff: "For cloud backups without plaintext leakage. Keyfile recommended.",
@@ -181,6 +215,8 @@
             profileHintBalanced: "Fast and strong. Good default for normal usage.",
             profileHintHardened: "Higher brute-force cost, but noticeably slower on older devices.",
             profileHintFortress: "Maximum local hardness: high KDF cost + double AES-GCM encryption.",
+            profileHintApex: "Extreme profile: 5 AES-GCM layers + stronger KDF mixing. Much slower, harder to brute force.",
+            profileHintQuantum: "Quantum hardening: 8 AES-GCM layers + multi-stage KDF mixing. Very slow, maximum hardness.",
             trustContextError: "Insecure context (no HTTPS).",
             blockedContext: "❌ BLOCKED: Crypto functions are only allowed in a secure context.",
             errorNoPassword: "❌ Error: Password missing!",
@@ -189,9 +225,11 @@
             errorCloudNeedsKeyfile: "❌ Cloud mode requires a keyfile.",
             errorRequireKeyfile: "❌ LOCK blocked: This setting requires a keyfile.",
             errorPasswordShort: "❌ LOCK blocked: Use at least 10 password characters.",
+            errorUnlockSingle: "❌ For UNLOCK, please select exactly one .neon file.",
             weakConfirm: "Password looks weak. Continue anyway?",
             weakAbort: "⚠️ Aborted: Please choose a stronger password.",
             cryptoError: "❌ ERROR / INTEGRITY CHECK FAILED!\n(Wrong password/keyfile or damaged file)",
+            unexpectedError: "❌ Unexpected error. Please reload the page and try again.",
             keyfileLoaded: "✅ Keyfile loaded:",
             doneCloud: "✅ DONE:",
             doneCloudSuffix: "+ SHA-256 hash exported (Cloud mode).",
@@ -239,7 +277,11 @@
     function updateFileInfo() {
         if (!fileInfo) return;
         if (currentFiles.length > 0) {
-            fileInfo.innerText = currentFiles.length + " " + t("filesReadySuffix") + ": " + currentFiles.map((f) => f.name).join(", ");
+            const previewNames = currentFiles
+                .slice(0, 6)
+                .map((f) => f.vaultPath || f.name);
+            const suffix = currentFiles.length > 6 ? ", …" : "";
+            fileInfo.innerText = currentFiles.length + " " + t("filesReadySuffix") + ": " + previewNames.join(", ") + suffix;
             fileInfo.style.color = "var(--neon)";
             return;
         }
@@ -255,6 +297,82 @@
             return;
         }
         nameEl.innerText = t("keyfileLoaded") + " " + keyfileDisplayName;
+    }
+
+    function normalizeVaultPath(path, fallbackName) {
+        const raw = typeof path === "string" ? path : "";
+        const normalized = raw
+            .replace(/\\/g, "/")
+            .replace(/^\/+/, "")
+            .replace(/\/{2,}/g, "/")
+            .trim();
+        return normalized || fallbackName;
+    }
+
+    function normalizeFilesWithVaultPath(files) {
+        return Array.from(files || []).map((file) => {
+            const sourcePath = file.webkitRelativePath || file.vaultPath || file.name;
+            file.vaultPath = normalizeVaultPath(sourcePath, file.name);
+            return file;
+        });
+    }
+
+    function readDirectoryEntries(reader) {
+        return new Promise((resolve, reject) => {
+            reader.readEntries(resolve, reject);
+        });
+    }
+
+    async function readAllDirectoryEntries(directoryEntry) {
+        const reader = directoryEntry.createReader();
+        const out = [];
+        while (true) {
+            const entries = await readDirectoryEntries(reader);
+            if (!entries || entries.length === 0) break;
+            out.push(...entries);
+        }
+        return out;
+    }
+
+    function readFileFromEntry(fileEntry) {
+        return new Promise((resolve, reject) => {
+            fileEntry.file(resolve, reject);
+        });
+    }
+
+    async function collectFilesFromEntry(entry) {
+        if (!entry) return [];
+        if (entry.isFile) {
+            const file = await readFileFromEntry(entry);
+            file.vaultPath = normalizeVaultPath(entry.fullPath || file.webkitRelativePath || file.name, file.name);
+            return [file];
+        }
+        if (!entry.isDirectory) return [];
+
+        const children = await readAllDirectoryEntries(entry);
+        const nested = [];
+        for (const child of children) {
+            nested.push(...await collectFilesFromEntry(child));
+        }
+        return nested;
+    }
+
+    async function collectFilesFromDrop(dataTransfer) {
+        if (!dataTransfer) return [];
+
+        const itemEntries = Array.from(dataTransfer.items || [])
+            .map((item) => typeof item.webkitGetAsEntry === "function" ? item.webkitGetAsEntry() : null)
+            .filter(Boolean);
+
+        if (itemEntries.length > 0) {
+            const out = [];
+            for (const entry of itemEntries) {
+                out.push(...await collectFilesFromEntry(entry));
+            }
+            return normalizeFilesWithVaultPath(out);
+        }
+
+        return normalizeFilesWithVaultPath(dataTransfer.files || []);
     }
 
     function wipePreviewUrls() {
@@ -376,6 +494,8 @@
         document.getElementById("guide-privacy").innerHTML = t("guidePrivacy");
         document.getElementById("files-title").textContent = t("filesTitle");
         document.getElementById("drop-text").textContent = t("dropText");
+        document.getElementById("pick-files-btn").textContent = t("pickFilesBtn");
+        document.getElementById("pick-folder-btn").textContent = t("pickFolderBtn");
         document.getElementById("security-title").textContent = t("securityTitle");
         passInput.placeholder = t("passPlaceholder");
         document.getElementById("keyfile-label").textContent = t("keyfileLabel");
@@ -385,6 +505,8 @@
         document.getElementById("profile-balanced").textContent = t("profileBalanced");
         document.getElementById("profile-hardened").textContent = t("profileHardened");
         document.getElementById("profile-fortress").textContent = t("profileFortress");
+        document.getElementById("profile-apex").textContent = t("profileApex");
+        document.getElementById("profile-quantum").textContent = t("profileQuantum");
         document.getElementById("cloud-label").textContent = t("cloudLabel");
         document.getElementById("require-keyfile-label").textContent = t("requireKeyfileLabel");
         document.getElementById("clear-secret-label").textContent = t("clearSecretLabel");
@@ -525,12 +647,8 @@
     }
 
     function updateProfileHint() {
-        const profileHintKey = profileSelect.value === "fortress"
-            ? "profileHintFortress"
-            : profileSelect.value === "hardened"
-                ? "profileHintHardened"
-                : "profileHintBalanced";
-        profileHint.innerText = t(profileHintKey);
+        const profile = getSelectedProfile();
+        profileHint.innerText = t(profile.hintKey || "profileHintBalanced");
         cloudModeHint.innerText = getCloudModeEnabled() ? t("cloudHintOn") : t("cloudHintOff");
     }
 
@@ -571,10 +689,28 @@
     passToggle.addEventListener('click', togglePass);
     lockButton.addEventListener('click', () => process('lock'));
     unlockButton.addEventListener('click', () => process('unlock'));
+    pickFilesButton.addEventListener('click', () => fileInput.click());
+    pickFolderButton.addEventListener('click', () => folderInput.click());
     setLanguage(localStorage.getItem("neon-lang") || "de");
     updatePasswordStrength();
     toggleCloudMode();
     updateAutoLockWatchers();
+
+    window.addEventListener("error", () => {
+        const log = document.getElementById('log');
+        if (!log) return;
+        log.innerText = t("unexpectedError");
+        log.style.color = "var(--warning)";
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+        console.error(event.reason);
+        const log = document.getElementById('log');
+        if (log) {
+            log.innerText = t("unexpectedError");
+            log.style.color = "var(--warning)";
+        }
+        event.preventDefault();
+    });
 
     function toggleKeyfileUI() {
         if (keyfileToggle.checked) {
@@ -620,15 +756,30 @@
     });
     dropArea.addEventListener('dragover', () => dropArea.classList.add('dragover'));
     dropArea.addEventListener('dragleave', () => dropArea.classList.remove('dragover'));
-    dropArea.addEventListener('drop', (e) => {
+    dropArea.addEventListener('drop', async (e) => {
         dropArea.classList.remove('dragover');
-        handleFiles(e.dataTransfer.files);
+        try {
+            const droppedFiles = await collectFilesFromDrop(e.dataTransfer);
+            handleFiles(droppedFiles);
+        } catch (error) {
+            console.error(error);
+            const log = document.getElementById('log');
+            log.innerText = t("unexpectedError");
+            log.style.color = "var(--warning)";
+        }
     });
     dropArea.addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+    fileInput.addEventListener('change', (e) => {
+        handleFiles(e.target.files);
+        e.target.value = "";
+    });
+    folderInput.addEventListener('change', (e) => {
+        handleFiles(e.target.files);
+        e.target.value = "";
+    });
 
     function handleFiles(files) {
-        currentFiles = Array.from(files);
+        currentFiles = normalizeFilesWithVaultPath(files);
         updateFileInfo();
         resetInactivityTimer();
     }
@@ -648,6 +799,11 @@
         }
         if (currentFiles.length === 0) {
             log.innerText = t("errorNoFiles");
+            log.style.color = "var(--warning)";
+            return;
+        }
+        if (action === 'unlock' && currentFiles.length !== 1) {
+            log.innerText = t("errorUnlockSingle");
             log.style.color = "var(--warning)";
             return;
         }
@@ -805,6 +961,23 @@
         return crypto.subtle.importKey("raw", material, "PBKDF2", false, ["deriveKey"]);
     }
 
+    async function getQuantumKeyMaterial(password, keyBytes) {
+        const encoder = new TextEncoder();
+        const passBytes = encoder.encode(password);
+        const keyDigest = keyBytes
+            ? new Uint8Array(await crypto.subtle.digest("SHA-512", keyBytes))
+            : new Uint8Array(0);
+
+        const phase1Seed = concatUint8(encoder.encode("NEON2-QM3|"), passBytes, encoder.encode("|"), keyDigest);
+        const phase1 = new Uint8Array(await crypto.subtle.digest("SHA-512", phase1Seed));
+        const phase2 = new Uint8Array(await crypto.subtle.digest("SHA-256", concatUint8(phase1, passBytes)));
+        const phase3 = new Uint8Array(await crypto.subtle.digest("SHA-512", concatUint8(phase2, keyDigest, phase1)));
+        const mixed = concatUint8(phase1, phase2, phase3);
+        const finalMaterial = new Uint8Array(await crypto.subtle.digest("SHA-512", mixed));
+
+        return crypto.subtle.importKey("raw", finalMaterial, "PBKDF2", false, ["deriveKey"]);
+    }
+
     function validateKdfConfig(kdf) {
         const isHashAllowed = kdf.hash === "SHA-256" || kdf.hash === "SHA-512";
         const isIterationSafe = Number.isInteger(kdf.iterations) && kdf.iterations >= 100000 && kdf.iterations <= 3000000;
@@ -815,9 +988,11 @@
 
     async function deriveAesKey(password, keyBytes, salt, kdf, purpose, usage, keyMaterialVersion) {
         validateKdfConfig(kdf);
-        const keyMaterial = keyMaterialVersion === 2
-            ? await getHardenedKeyMaterial(password, keyBytes)
-            : await getLegacyKeyMaterial(password, keyBytes);
+        const keyMaterial = keyMaterialVersion === 3
+            ? await getQuantumKeyMaterial(password, keyBytes)
+            : keyMaterialVersion === 2
+                ? await getHardenedKeyMaterial(password, keyBytes)
+                : await getLegacyKeyMaterial(password, keyBytes);
         return crypto.subtle.deriveKey(
             {
                 name: "PBKDF2",
@@ -853,7 +1028,8 @@
         const dataParts = [];
         for (const f of currentFiles) {
             const content = new Uint8Array(await f.arrayBuffer());
-            const header = encoder.encode(JSON.stringify({ n: f.name, t: f.type, s: content.length }));
+            const filePath = normalizeVaultPath(f.vaultPath || f.webkitRelativePath || f.name, f.name);
+            const header = encoder.encode(JSON.stringify({ n: filePath, t: f.type, s: content.length }));
             dataParts.push(writeUint32LE(header.length), header, content);
         }
 
@@ -870,7 +1046,7 @@
             v: 2,
             kdf: { iterations: profile.iterations, hash: profile.hash },
             layers: profile.layers,
-            km: 2,
+            km: profile.keyMaterialVersion || 2,
             aad: 1,
             padPlain: plainPad
         };
@@ -880,7 +1056,15 @@
         for (let layer = 1; layer <= profile.layers; layer++) {
             const salt = randomBytes(16);
             const iv = randomBytes(12);
-            const key = await deriveAesKey(pw, keyfileBytes, salt, profile, "layer-" + layer, "encrypt", 2);
+            const key = await deriveAesKey(
+                pw,
+                keyfileBytes,
+                salt,
+                profile,
+                "layer-" + layer,
+                "encrypt",
+                profile.keyMaterialVersion || 2
+            );
             const aad = buildLayerAad(envelopeHeader, layer);
             const encrypted = new Uint8Array(await crypto.subtle.encrypt(
                 { name: "AES-GCM", iv: iv, additionalData: aad },
@@ -932,11 +1116,11 @@
         if (!header.kdf || typeof header.kdf !== "object") {
             throw new Error("Defekte NEON2-Datei: KDF-Daten fehlen.");
         }
-        if (!Number.isInteger(header.layers) || header.layers < 1 || header.layers > 2) {
+        if (!Number.isInteger(header.layers) || header.layers < 1 || header.layers > 8) {
             throw new Error("Defekte NEON2-Datei: Layer-Wert ist ungültig.");
         }
         if (header.km === undefined) header.km = 1;
-        if (header.km !== 1 && header.km !== 2) {
+        if (header.km !== 1 && header.km !== 2 && header.km !== 3) {
             throw new Error("Defekte NEON2-Datei: Key-Material-Version ungültig.");
         }
         if (header.aad !== undefined && header.aad !== 0 && header.aad !== 1) {
@@ -1036,6 +1220,11 @@
         return entries;
     }
 
+    function toDownloadFilename(vaultPath) {
+        const normalized = normalizeVaultPath(vaultPath, "file.bin");
+        return normalized.replace(/[\\/]/g, "__");
+    }
+
     function renderPreviewItem(previewGrid, entry) {
         const url = URL.createObjectURL(new Blob([entry.data], { type: entry.type }));
         previewObjectUrls.push(url);
@@ -1062,7 +1251,7 @@
 
         const link = document.createElement('a');
         link.href = url;
-        link.download = entry.name;
+        link.download = toDownloadFilename(entry.name);
         link.textContent = t("previewDownload");
         link.style.background = "var(--neon)";
         link.style.color = "#000";

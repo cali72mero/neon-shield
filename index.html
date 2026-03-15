@@ -102,8 +102,13 @@
     <div class="card">
         <h2 id="files-title">01_DATEIEN AUSWÄHLEN</h2>
         <div class="drop-zone" id="drop-area">
-            <span id="drop-text">Dateien hierher ziehen oder klicken</span>
+            <span id="drop-text">Dateien oder Ordner hierher ziehen oder klicken</span>
             <input type="file" id="file-input" multiple style="display:none">
+            <input type="file" id="folder-input" webkitdirectory directory multiple style="display:none">
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:12px;">
+            <button id="pick-files-btn" type="button">Dateien wählen</button>
+            <button id="pick-folder-btn" type="button" style="background:#334155; color:#fff;">Ordner wählen</button>
         </div>
         <div id="file-info" style="font-size:0.9rem; margin-top:10px; text-align: center; color: var(--neon);">Keine Dateien geladen.</div>
     </div>
@@ -142,6 +147,8 @@
             <option id="profile-balanced" value="balanced">Balanced | PBKDF2-SHA256 | 600k | 1 Layer</option>
             <option id="profile-hardened" value="hardened">Hardened | PBKDF2-SHA512 | 1.2M | 1 Layer</option>
             <option id="profile-fortress" value="fortress">Fortress | PBKDF2-SHA512 | 1.5M | 2 Layer</option>
+            <option id="profile-apex" value="apex5">Apex-5 | PBKDF2-SHA512 | 1.9M | 5 Layer</option>
+            <option id="profile-quantum" value="quantum8">Quantum-8 | PBKDF2-SHA512 | 2.3M | 8 Layer</option>
         </select>
         <div id="profile-hint" class="profile-hint"></div>
 

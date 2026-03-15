@@ -462,10 +462,35 @@
         return nested;
     }
 
+    async function collectFilesFromHandle(handle, basePath = "") {
+        if (!handle) return [];
+        if (handle.kind === "file") {
+            const file = await handle.getFile();
+            const fullPath = normalizeVaultPath(basePath + "/" + file.name, file.name);
+            file.vaultPath = fullPath;
+            return [file];
+        }
+        if (handle.kind !== "directory") return [];
+
+        const nested = [];
+        for await (const [name, child] of handle.entries()) {
+            const childBase = normalizeVaultPath(basePath + "/" + name, name);
+            if (child.kind === "file") {
+                const file = await child.getFile();
+                file.vaultPath = childBase;
+                nested.push(file);
+                continue;
+            }
+            nested.push(...await collectFilesFromHandle(child, childBase));
+        }
+        return nested;
+    }
+
     async function collectFilesFromDrop(dataTransfer) {
         if (!dataTransfer) return [];
 
-        const itemEntries = Array.from(dataTransfer.items || [])
+        const items = Array.from(dataTransfer.items || []);
+        const itemEntries = items
             .map((item) => typeof item.webkitGetAsEntry === "function" ? item.webkitGetAsEntry() : null)
             .filter(Boolean);
 
@@ -475,6 +500,24 @@
                 out.push(...await collectFilesFromEntry(entry));
             }
             return normalizeFilesWithVaultPath(out);
+        }
+
+        // Fallback for browsers that expose FileSystemHandle on drag items.
+        if (items.length > 0 && typeof items[0].getAsFileSystemHandle === "function") {
+            const handles = await Promise.all(items.map(async (item) => {
+                try {
+                    return await item.getAsFileSystemHandle();
+                } catch {
+                    return null;
+                }
+            }));
+            const out = [];
+            for (const handle of handles.filter(Boolean)) {
+                out.push(...await collectFilesFromHandle(handle, ""));
+            }
+            if (out.length > 0) {
+                return normalizeFilesWithVaultPath(out);
+            }
         }
 
         return normalizeFilesWithVaultPath(dataTransfer.files || []);

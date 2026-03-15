@@ -89,6 +89,13 @@
             guideB2: "<strong>LOCK:</strong> Dateien auswählen, starkes Passwort setzen, optional Keyfile hinzufügen, dann Tresor erzeugen.",
             guideB3: "<strong>UNLOCK:</strong> <code>.neon</code>-Datei laden, Passwort (und ggf. Keyfile) eingeben, Inhalte sicher wiederherstellen.",
             guideB4: "<strong>Cloud-Mode:</strong> Für Backups mit anonymisiertem Dateinamen, Padding und SHA-256-Prüfdatei.",
+            guideProfilesTitle: "<strong>Welche Stufe soll ich wählen?</strong>",
+            guideP1: "<strong>Balanced:</strong> Alltag, kleine/mittlere Dateien, schnell.",
+            guideP2: "<strong>Hardened:</strong> Mehr Schutz bei weiterhin guter Nutzbarkeit.",
+            guideP3: "<strong>Fortress:</strong> Für sensible Daten auf modernen Geräten.",
+            guideP4: "<strong>Apex-5:</strong> Sehr hoher Schutz, deutlich langsamer.",
+            guideP5: "<strong>Quantum-8:</strong> Maximale Härte (extrem langsam), nur für sehr sensible Daten.",
+            guideBestPractice: "<strong>Empfehlung:</strong> Nimm ein langes Passwort (mind. 16+ Zeichen) und aktiviere bei wichtigen Daten ein Keyfile.",
             guideAlert: "⚠️ WICHTIG: Ohne korrektes Passwort (und ggf. Keyfile) ist eine Wiederherstellung nicht möglich.",
             guidePrivacy: "<strong>Datenschutz:</strong> Verschlüsselung und Entschlüsselung laufen im Browser. Du entscheidest selbst, wo du die erzeugten Dateien speicherst.",
             filesTitle: "01_DATEIEN AUSWÄHLEN",
@@ -177,6 +184,13 @@
             guideB2: "<strong>LOCK:</strong> Select files, set a strong password, optionally add a keyfile, then create your vault.",
             guideB3: "<strong>UNLOCK:</strong> Load a <code>.neon</code> file, enter password (and keyfile if used), then recover your files securely.",
             guideB4: "<strong>Cloud mode:</strong> For backups with randomized filename, padding, and SHA-256 verification file.",
+            guideProfilesTitle: "<strong>Which profile should I choose?</strong>",
+            guideP1: "<strong>Balanced:</strong> Daily use, small/medium files, fast.",
+            guideP2: "<strong>Hardened:</strong> More protection with good usability.",
+            guideP3: "<strong>Fortress:</strong> For sensitive files on modern devices.",
+            guideP4: "<strong>Apex-5:</strong> Very high protection, clearly slower.",
+            guideP5: "<strong>Quantum-8:</strong> Maximum hardness (very slow), only for highly sensitive data.",
+            guideBestPractice: "<strong>Best practice:</strong> Use a long password (at least 16+ chars) and enable a keyfile for important data.",
             guideAlert: "⚠️ IMPORTANT: Without the correct password (and keyfile, if enabled), recovery is not possible.",
             guidePrivacy: "<strong>Privacy:</strong> Encryption and decryption happen in your browser. You decide where generated files are stored.",
             filesTitle: "01_SELECT FILES",
@@ -490,6 +504,13 @@
         document.getElementById("guide-b2").innerHTML = t("guideB2");
         document.getElementById("guide-b3").innerHTML = t("guideB3");
         document.getElementById("guide-b4").innerHTML = t("guideB4");
+        document.getElementById("guide-profiles-title").innerHTML = t("guideProfilesTitle");
+        document.getElementById("guide-p1").innerHTML = t("guideP1");
+        document.getElementById("guide-p2").innerHTML = t("guideP2");
+        document.getElementById("guide-p3").innerHTML = t("guideP3");
+        document.getElementById("guide-p4").innerHTML = t("guideP4");
+        document.getElementById("guide-p5").innerHTML = t("guideP5");
+        document.getElementById("guide-best-practice").innerHTML = t("guideBestPractice");
         document.getElementById("guide-alert").textContent = t("guideAlert");
         document.getElementById("guide-privacy").innerHTML = t("guidePrivacy");
         document.getElementById("files-title").textContent = t("filesTitle");

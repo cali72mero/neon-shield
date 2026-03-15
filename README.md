@@ -17,6 +17,20 @@
 3. Starkes Passwort setzen (optional Keyfile aktivieren).
 4. `LOCK` zum Verschlüsseln oder `UNLOCK` zum Entschlüsseln nutzen.
 
+## Kurz-Anleitung: Welches Profil wann?
+
+- `Balanced`: Für Alltag und schnelle Verarbeitung.
+- `Hardened`: Wenn du mehr Schutz willst, aber noch gute Geschwindigkeit brauchst.
+- `Fortress`: Für sensible Daten mit starker lokaler Absicherung.
+- `Apex-5`: Für sehr sensible Daten, wenn längere Wartezeit okay ist.
+- `Quantum-8`: Maximale Härte, sehr langsam, nur für besonders kritische Daten.
+
+Empfohlene Praxis:
+
+- Passwort mit mindestens 16+ Zeichen nutzen.
+- Für wichtige Daten zusätzlich Keyfile aktivieren.
+- Bei Cloud-Backups immer die `*.sha256.txt` Prüfsumme mit prüfen.
+
 ## Was die App kann
 
 - AES-256-GCM mit Integritätsprüfung.

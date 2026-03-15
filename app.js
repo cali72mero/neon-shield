@@ -1,6 +1,8 @@
     let currentFiles = [];
     let keyfileBytes = null;
     let keyfileDisplayName = "";
+    let generatedKeyfileBytes = null;
+    let generatedKeyfileName = "";
     let recoveredKeyDigestOverride = null;
     let inactivityTimer = null;
     const previewObjectUrls = [];
@@ -74,6 +76,7 @@
     const securityReportEl = document.getElementById('security-report');
     const keyfileToggle = document.getElementById('keyfile-toggle');
     const genKeyfileButton = document.getElementById('gen-keyfile-btn');
+    const downloadKeyfileButton = document.getElementById('download-keyfile-btn');
     const passToggle = document.getElementById('toggle-pass');
     const lockButton = document.getElementById('lock-btn');
     const unlockButton = document.getElementById('unlock-btn');
@@ -117,6 +120,7 @@
             keyfileDropTitle: "[HIER KEYFILE ZIEHEN]",
             keyfileDropSub: "Bild, MP3 oder beliebige Datei als Schlüssel nutzen",
             genKeyfileBtn: "🔑 Keyfile lokal generieren",
+            downloadKeyfileBtn: "⬇ Keyfile herunterladen",
             genKeyfileHint: "Erstellt eine zufällige Keyfile-Datei lokal auf deinem Gerät.",
             profileLabel: "🔐 Sicherheitsprofil (für neue LOCK-Dateien)",
             profileBalanced: "Balanced | PBKDF2-SHA256 | 600k | 1 Layer",
@@ -183,6 +187,7 @@
             errorRecoveryAnswerMissing: "❌ Recovery-UNLOCK: Bitte alle erforderlichen Antworten eingeben.",
             errorRecoverySamePassword: "❌ Recovery-Passwort muss sich vom Master-Passwort unterscheiden.",
             recoveryPromptReady: "ℹ️ Recovery verfügbar: Bitte Recovery-Passwort und Antworten eingeben.",
+            errorNoGeneratedKeyfile: "❌ Es ist noch keine generierte Keyfile vorhanden.",
             errorPasswordShort: "❌ LOCK blockiert: Nutze mindestens 10 Zeichen Passwort.",
             errorUnlockSingle: "❌ Für UNLOCK bitte genau eine .neon-Datei auswählen.",
             weakConfirm: "Passwort ist eher schwach. Trotzdem fortfahren?",
@@ -191,6 +196,7 @@
             unexpectedError: "❌ Unerwarteter Fehler. Bitte Seite neu laden und erneut versuchen.",
             keyfileLoaded: "✅ Keyfile geladen:",
             keyfileGenerated: "✅ Keyfile lokal generiert und geladen:",
+            keyfileGeneratedReady: "✅ Keyfile erstellt. Klicke jetzt auf „Keyfile herunterladen“.",
             doneCloud: "✅ FERTIG:",
             doneCloudSuffix: "+ SHA-256-Hash exportiert (Cloud-Mode).",
             doneLock: "✅ FERTIG:",
@@ -247,6 +253,7 @@
             keyfileDropTitle: "[DROP KEYFILE HERE]",
             keyfileDropSub: "Use image, MP3 or any file as key",
             genKeyfileBtn: "🔑 Generate local keyfile",
+            downloadKeyfileBtn: "⬇ Download keyfile",
             genKeyfileHint: "Creates a random keyfile locally on your device.",
             profileLabel: "🔐 Security profile (for new LOCK files)",
             profileBalanced: "Balanced | PBKDF2-SHA256 | 600k | 1 layer",
@@ -313,6 +320,7 @@
             errorRecoveryAnswerMissing: "❌ Recovery UNLOCK: Please enter all required answers.",
             errorRecoverySamePassword: "❌ Recovery password must be different from the master password.",
             recoveryPromptReady: "ℹ️ Recovery available: Enter recovery password and answers.",
+            errorNoGeneratedKeyfile: "❌ No generated keyfile is available yet.",
             errorPasswordShort: "❌ LOCK blocked: Use at least 10 password characters.",
             errorUnlockSingle: "❌ For UNLOCK, please select exactly one .neon file.",
             weakConfirm: "Password looks weak. Continue anyway?",
@@ -321,6 +329,7 @@
             unexpectedError: "❌ Unexpected error. Please reload the page and try again.",
             keyfileLoaded: "✅ Keyfile loaded:",
             keyfileGenerated: "✅ Keyfile generated locally and loaded:",
+            keyfileGeneratedReady: "✅ Keyfile created. Click “Download keyfile” now.",
             doneCloud: "✅ DONE:",
             doneCloudSuffix: "+ SHA-256 hash exported (Cloud mode).",
             doneLock: "✅ DONE:",
@@ -388,6 +397,11 @@
             return;
         }
         nameEl.innerText = t("keyfileLoaded") + " " + keyfileDisplayName;
+    }
+
+    function updateDownloadKeyfileButton() {
+        if (!downloadKeyfileButton) return;
+        downloadKeyfileButton.style.display = generatedKeyfileBytes ? "block" : "none";
     }
 
     function normalizeVaultPath(path, fallbackName) {
@@ -596,7 +610,9 @@
         const bytes = randomBytes(1024 * 1024);
         const ts = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
         const filename = "neon-keyfile-" + ts + ".bin";
-        downloadBlob(new Blob([bytes], { type: "application/octet-stream" }), filename);
+        generatedKeyfileBytes = bytes;
+        generatedKeyfileName = filename;
+        updateDownloadKeyfileButton();
         keyfileBytes = bytes;
         keyfileDisplayName = filename;
         if (!keyfileToggle.checked) {
@@ -605,7 +621,7 @@
         }
         updateKeyfileStatus();
         const log = document.getElementById('log');
-        log.innerText = t("keyfileGenerated") + " " + filename;
+        log.innerText = t("keyfileGeneratedReady");
         log.style.color = "var(--success)";
     }
 
@@ -779,6 +795,7 @@
         document.getElementById("keyfile-drop-title").textContent = t("keyfileDropTitle");
         document.getElementById("keyfile-drop-sub").textContent = t("keyfileDropSub");
         document.getElementById("gen-keyfile-btn").textContent = t("genKeyfileBtn");
+        document.getElementById("download-keyfile-btn").textContent = t("downloadKeyfileBtn");
         document.getElementById("gen-keyfile-hint").textContent = t("genKeyfileHint");
         document.getElementById("profile-label").textContent = t("profileLabel");
         document.getElementById("profile-balanced").textContent = t("profileBalanced");
@@ -842,6 +859,7 @@
         updateProfileHint();
         updateFileInfo();
         updateKeyfileStatus();
+        updateDownloadKeyfileButton();
         document.querySelectorAll("#previews a").forEach((link) => {
             link.textContent = t("previewDownload");
         });
@@ -1022,10 +1040,22 @@
             log.style.color = "var(--warning)";
         });
     });
+    downloadKeyfileButton.addEventListener('click', () => {
+        const log = document.getElementById('log');
+        if (!generatedKeyfileBytes || !generatedKeyfileName) {
+            log.innerText = t("errorNoGeneratedKeyfile");
+            log.style.color = "var(--warning)";
+            return;
+        }
+        downloadBlob(new Blob([generatedKeyfileBytes], { type: "application/octet-stream" }), generatedKeyfileName);
+        log.innerText = t("keyfileGenerated") + " " + generatedKeyfileName;
+        log.style.color = "var(--success)";
+    });
     pickFilesButton.addEventListener('click', () => fileInput.click());
     pickFolderButton.addEventListener('click', () => folderInput.click());
     setLanguage(localStorage.getItem("neon-lang") || "de");
     updatePasswordStrength();
+    updateDownloadKeyfileButton();
     updateRecoveryRowsVisibility();
     toggleRecoveryPanel();
     toggleCloudMode();

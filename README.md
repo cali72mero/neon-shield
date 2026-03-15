@@ -36,7 +36,7 @@ Empfohlene Praxis:
 - AES-256-GCM mit Integritätsprüfung.
 - Sicherheitsprofile: `Balanced`, `Hardened`, `Fortress`, `Apex-5`, `Quantum-8`.
 - Optionales Keyfile als zweiter Faktor.
-- Lokaler Keyfile-Generator (`🔑 Keyfile lokal generieren`).
+- Lokaler Keyfile-Generator (`🔑 Keyfile lokal generieren` + `⬇ Keyfile herunterladen`).
 - Cloud-Mode mit zufälligem Dateinamen, Padding und `SHA-256`-Prüfdatei.
 - Zusätzliche Cloud-Härtung: wählbare Padding-Blockgröße + optionaler Tarnmodus (Decoy-Dateien).
 - Ganze Ordner verschlüsseln (Drag & Drop oder `Ordner wählen`).
